@@ -11,7 +11,7 @@ latest_data = {
 
 @app.route("/")
 def index():
-    # シンプルなJSONダンプみたいなページ（デバッグ用）
+    # simpleビュー（動いてるやつ）
     ts = latest_data.get("timestamp", None)
     if isinstance(ts, (int, float)):
         ts_str = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(ts))
@@ -30,8 +30,7 @@ def index():
 
 @app.route("/dashboard")
 def dashboard():
-    # ここがスマホやPCで見る"本番画面"
-    # 5秒ごとに /status をfetchして、人数と座席ブロックの色を更新するよ
+    # 5秒ごとに /status をfetchして画面を更新するビュー
     return """
     <!DOCTYPE html>
     <html>
@@ -90,7 +89,6 @@ def dashboard():
                 color: #222;
             }
 
-            /* 座席グリッド */
             .seats-wrapper {
                 background: white;
                 border-radius: 16px;
@@ -130,7 +128,7 @@ def dashboard():
             }
 
             .seat-occupied {
-                background: #2ecc71; /* 着座中っぽいグリーン */
+                background: #2ecc71; /* 着座中グリーン */
             }
 
             footer {
@@ -145,7 +143,6 @@ def dashboard():
                 color: #555;
                 margin-top: .25rem;
             }
-
         </style>
     </head>
     <body>
@@ -180,13 +177,12 @@ def dashboard():
         </footer>
 
         <script>
-        // 座席の要素を作り直すヘルパー
         function renderSeats(seatsArray) {
             const grid = document.getElementById("seats-grid");
-            grid.innerHTML = ""; // 全消しして作り直すシンプル方式
+            grid.innerHTML = "";
 
             for (let i = 0; i < 10; i++) {
-                const val = seatsArray && seatsArray[i] ? seatsArray[i] : 0;
+                const val = (seatsArray && seatsArray[i] === 1) ? 1 : 0;
                 const occupied = (val === 1);
 
                 const div = document.createElement("div");
@@ -199,13 +195,11 @@ def dashboard():
             }
         }
 
-        // /status を取りに行って画面更新
         async function refreshData() {
             try {
                 const res = await fetch("/status");
                 const data = await res.json();
 
-                // timestamp 表示用
                 let tsReadable = data.timestamp;
                 if (typeof data.timestamp === "number") {
                     const d = new Date(data.timestamp * 1000);
@@ -213,26 +207,25 @@ def dashboard():
                 }
 
                 document.getElementById("last-ts").textContent = tsReadable || "---";
-                document.getElementById("count-num").textContent = data.count ?? "0";
-
+                document.getElementById("count-num").textContent = (data.count ?? "0");
                 renderSeats(data.seats);
             } catch (err) {
                 console.error("refreshData failed:", err);
             }
         }
 
-        // 最初に1回
         refreshData();
-        // 5秒おきに更新
         setInterval(refreshData, 5000);
         </script>
     </body>
     </html>
     """
 
+
 @app.route("/status")
 def status():
     return jsonify(latest_data)
+
 
 @app.route("/push", methods=["POST"])
 def push():
@@ -241,7 +234,6 @@ def push():
     if not data:
         return jsonify({"error": "no data"}), 400
 
-    # 管理PCから送られた内容で最新状態を更新
     latest_data = {
         "timestamp": data.get("timestamp", latest_data.get("timestamp")),
         "seats": data.get("seats", latest_data.get("seats", [])),
@@ -249,6 +241,7 @@ def push():
     }
 
     return jsonify({"ok": True})
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
