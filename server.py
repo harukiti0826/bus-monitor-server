@@ -28,195 +28,110 @@ def index():
     return html
 
 
-@app.route("/dashboard")
-def dashboard():
-    # 5秒ごとに /status をfetchして画面を更新するビュー
+@app.route("/")
+def index():
+    # /status を5秒ごとに取りに行って、画面を書き換えるタイプ
     return """
     <!DOCTYPE html>
     <html>
     <head>
         <meta charset="utf-8" />
-        <title>Bus Live Dashboard</title>
+        <title>Bus Monitor (auto)</title>
         <style>
             body {
                 font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-                background: #f5f5f5;
+                max-width: 480px;
+                margin: 1.5rem auto;
+                line-height: 1.5;
                 color: #222;
-                max-width: 900px;
-                margin: 1.5rem auto 4rem auto;
-                line-height: 1.4;
             }
-
-            header {
-                display: flex;
-                align-items: flex-end;
-                justify-content: space-between;
-                flex-wrap: wrap;
-                gap: 1rem;
-                margin-bottom: 1.5rem;
-            }
-
-            .title-box {
+            h1 {
+                font-size: 1.6rem;
                 display: flex;
                 align-items: center;
-                gap: .6rem;
-                font-weight: 600;
-                font-size: 1.4rem;
+                gap: .5rem;
+                margin-bottom: 1rem;
             }
-
-            .timestamp {
-                font-size: .9rem;
-                color: #555;
-            }
-
-            .count-box {
-                background: white;
+            .card {
+                background: #f9f9f9;
                 border-radius: 12px;
-                box-shadow: 0 10px 24px rgba(0,0,0,0.07);
                 padding: 1rem 1.2rem;
-                min-width: 200px;
-                flex-shrink: 0;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+                margin-bottom: 1rem;
             }
-
-            .count-label {
-                font-size: .9rem;
+            .label {
+                font-size: .8rem;
                 color: #666;
+                margin-top: .25rem;
             }
-
-            .count-value {
-                font-size: 2rem;
-                font-weight: 700;
-                color: #222;
-            }
-
-            .seats-wrapper {
-                background: white;
-                border-radius: 16px;
-                box-shadow: 0 10px 24px rgba(0,0,0,0.07);
-                padding: 1rem 1.2rem 1.5rem 1.2rem;
-            }
-
-            .seats-title {
-                font-weight: 600;
-                margin-bottom: .5rem;
-                display: flex;
-                align-items: baseline;
-                justify-content: space-between;
-                flex-wrap: wrap;
-            }
-
-            .seats-grid {
-                display: grid;
-                grid-template-columns: repeat(2, minmax(120px,1fr));
-                gap: 12px;
-                max-width: 320px;
-            }
-
-            .seat-card {
-                border-radius: 12px;
-                padding: .8rem;
+            .seats-box {
+                font-family: monospace;
                 font-size: .95rem;
-                font-weight: 600;
-                text-align: center;
-                line-height: 1.4;
-                color: white;
-                box-shadow: 0 6px 16px rgba(0,0,0,0.12);
+                background: #fff;
+                border-radius: 8px;
+                border: 1px solid #ddd;
+                padding: .6rem .8rem;
+                word-break: break-word;
             }
-
-            .seat-free {
-                background: #777; /* 空席 */
-            }
-
-            .seat-occupied {
-                background: #2ecc71; /* 着座中グリーン */
-            }
-
             footer {
-                text-align: center;
                 font-size: .8rem;
                 color: #888;
+                text-align: center;
                 margin-top: 2rem;
-            }
-
-            .note-row {
-                font-size: .8rem;
-                color: #555;
-                margin-top: .25rem;
             }
         </style>
     </head>
     <body>
-        <header>
-            <div>
-                <div class="title-box">
-                    <div style="font-size:1.5rem;">🚌</div>
-                    <div>Bus Monitor</div>
-                </div>
-                <div class="timestamp">last update: <span id="last-ts">---</span></div>
-            </div>
 
-            <div class="count-box">
-                <div class="count-label">現在乗車中</div>
-                <div class="count-value"><span id="count-num">0</span> 人</div>
-            </div>
-        </header>
+        <h1>🚌 Bus Monitor (auto)</h1>
 
-        <section class="seats-wrapper">
-            <div class="seats-title">
-                <div>座席ステータス</div>
-                <div class="note-row">1 = 着座中 / 0 = 空席</div>
+        <div class="card">
+            <div><strong>last update:</strong> <span id="ts">---</span></div>
+            <div style="font-size:1.2rem; margin-top:.5rem;">
+                <strong>current count:</strong> <span id="count">0</span> 人
             </div>
+            <div class="label">現在乗車中の人数</div>
+        </div>
 
-            <div class="seats-grid" id="seats-grid">
-                <!-- JSでSeat1〜Seat10をここに描画する -->
-            </div>
-        </section>
+        <div class="card">
+            <div style="font-weight:600; margin-bottom:.4rem;">seats:</div>
+            <div class="seats-box" id="seats">[0,0,0,0,0,0,0,0,0,0]</div>
+            <div class="label">1=着座中 / 0=空席</div>
+        </div>
 
         <footer>
-            5秒ごとに自動更新中 / Renderで配信中〜ザウルス🦖
+            5秒ごとに自動更新中〜ザウルス🦖
         </footer>
 
         <script>
-        function renderSeats(seatsArray) {
-            const grid = document.getElementById("seats-grid");
-            grid.innerHTML = "";
-
-            for (let i = 0; i < 10; i++) {
-                const val = (seatsArray && seatsArray[i] === 1) ? 1 : 0;
-                const occupied = (val === 1);
-
-                const div = document.createElement("div");
-                div.className = "seat-card " + (occupied ? "seat-occupied" : "seat-free");
-                div.innerHTML = `
-                    Seat ${i+1}<br>
-                    ${occupied ? "着座中" : "空"}
-                `;
-                grid.appendChild(div);
-            }
-        }
-
-        async function refreshData() {
+        async function updateStatus() {
             try {
                 const res = await fetch("/status");
                 const data = await res.json();
 
-                let tsReadable = data.timestamp;
-                if (typeof data.timestamp === "number") {
-                    const d = new Date(data.timestamp * 1000);
+                // timestampは数値のとき(UNIX秒)と文字列(isoformat)両方あり得る
+                const tsRaw = data.timestamp;
+                let tsReadable = tsRaw;
+
+                if (typeof tsRaw === "number") {
+                    const d = new Date(tsRaw * 1000);
                     tsReadable = d.toLocaleString();
                 }
 
-                document.getElementById("last-ts").textContent = tsReadable || "---";
-                document.getElementById("count-num").textContent = (data.count ?? "0");
-                renderSeats(data.seats);
+                document.getElementById("ts").textContent = tsReadable || "---";
+                document.getElementById("count").textContent = data.count ?? "0";
+                document.getElementById("seats").textContent = JSON.stringify(data.seats);
             } catch (err) {
-                console.error("refreshData failed:", err);
+                console.error("update failed:", err);
             }
         }
 
-        refreshData();
-        setInterval(refreshData, 5000);
+        // 最初に1回即実行
+        updateStatus();
+        // 5秒おきに更新
+        setInterval(updateStatus, 5000);
         </script>
+
     </body>
     </html>
     """
@@ -246,4 +161,5 @@ def push():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
+
 
