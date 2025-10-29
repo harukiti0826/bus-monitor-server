@@ -3,34 +3,16 @@ import time, os
 
 app = Flask(__name__)
 
+# 最新状態を保持する辞書
 latest_data = {
-    "timestamp": time.time(),  # 初期はUNIX秒(float)
+    "timestamp": time.time(),          # 初期はUNIX秒(float)
     "seats": [0, 1, 0, 0, 1, 0, 0, 0, 0, 0],
     "count": 2
 }
 
 @app.route("/")
 def index():
-    # simpleビュー（動いてるやつ）
-    ts = latest_data.get("timestamp", None)
-    if isinstance(ts, (int, float)):
-        ts_str = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(ts))
-    else:
-        ts_str = str(ts)
-
-    html = f"""
-    <h1>🚌 Bus Monitor (simple)</h1>
-    <p>last update: {ts_str}</p>
-    <p>current count: {latest_data.get("count",0)}人</p>
-    <p>seats: {latest_data.get("seats",[])}</p>
-    <p style='color:gray;'>※本番ビューは /dashboard です🦖</p>
-    """
-    return html
-
-
-@app.route("/")
-def index():
-    # /status を5秒ごとに取りに行って、画面を書き換えるタイプ
+    # /status を5秒ごとにfetchして画面を自動更新してくれるビュー
     return """
     <!DOCTYPE html>
     <html>
@@ -109,7 +91,7 @@ def index():
                 const res = await fetch("/status");
                 const data = await res.json();
 
-                // timestampは数値のとき(UNIX秒)と文字列(isoformat)両方あり得る
+                // timestamp は push元によって数値(UNIX秒)か文字列(isoformat)が来る
                 const tsRaw = data.timestamp;
                 let tsReadable = tsRaw;
 
@@ -126,9 +108,9 @@ def index():
             }
         }
 
-        // 最初に1回即実行
+        // 最初に1回即更新
         updateStatus();
-        // 5秒おきに更新
+        // 5秒ごとに最新データ取得
         setInterval(updateStatus, 5000);
         </script>
 
@@ -136,14 +118,14 @@ def index():
     </html>
     """
 
-
 @app.route("/status")
 def status():
+    # 最新データをそのまま返す
     return jsonify(latest_data)
-
 
 @app.route("/push", methods=["POST"])
 def push():
+    # 管理PCから座席データを受け取って更新する
     global latest_data
     data = request.get_json()
     if not data:
@@ -156,7 +138,6 @@ def push():
     }
 
     return jsonify({"ok": True})
-
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
