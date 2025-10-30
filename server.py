@@ -68,7 +68,7 @@ def index():
   }}
   /* ★ 左上の席番号（少し下げる） */
   .seat-num {{
-    font: 700 22px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font: 700 60px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     fill:#111;
     paint-order: stroke; stroke: #fff; stroke-width: 2px;
   }}
@@ -357,3 +357,4 @@ def push():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
+
