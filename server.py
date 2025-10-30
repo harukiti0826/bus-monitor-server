@@ -1,4 +1,4 @@
-# server.py — 編集モード(ドラッグ)付き・座席番号1,2,3を逆順表示版
+# server.py — 1↔3 表示入替 & 席番号60pt版
 from flask import Flask, jsonify, request, send_from_directory
 import time, os, json
 
@@ -6,26 +6,26 @@ app = Flask(__name__, static_folder="static")
 
 # ===== 基本設定 =====
 NUM_SEATS       = 8
-MAX_HISTORY     = 360            # 5秒ごと約30分（5秒×360=約30分）
-EDIT_MODE_FLAG  = True           # ★編集する間は True、終わったら False に戻してね
+MAX_HISTORY     = 360            # 5秒ごと約30分
+EDIT_MODE_FLAG  = False          # 位置調整が必要なら True
 
-# ===== 座席座標（提供値：正規化 0〜1） =====
+# ===== 座席座標（正規化 0〜1）— ユーザー提供最新版 =====
 SEATS_NORM_DATA = [
-    {"x": 0.0623, "y": 0.1666, "w": 0.0858, "h": 0.1678},
-    {"x": 0.0623, "y": 0.4133, "w": 0.0868, "h": 0.1716},
-    {"x": 0.0623, "y": 0.6639, "w": 0.0868, "h": 0.1697},
-    {"x": 0.2961, "y": 0.1642, "w": 0.0879, "h": 0.1716},
-    {"x": 0.4657, "y": 0.1661, "w": 0.0889, "h": 0.1697},
-    {"x": 0.7004, "y": 0.1646, "w": 0.0879, "h": 0.1716},
-    {"x": 0.7014, "y": 0.4133, "w": 0.0868, "h": 0.1716},
-    {"x": 0.7004, "y": 0.6619, "w": 0.0879, "h": 0.1736}
+    {"x": 0.06332041629456332, "y": 0.6654928937601677, "w": 0.0858, "h": 0.1678},
+    {"x": 0.0623,              "y": 0.4133,              "w": 0.0868, "h": 0.1716},
+    {"x": 0.06230000000000006, "y": 0.16694828238332093, "w": 0.0868, "h": 0.1697},
+    {"x": 0.2961,              "y": 0.1642,              "w": 0.0879, "h": 0.1716},
+    {"x": 0.4657,              "y": 0.1661,              "w": 0.0889, "h": 0.1697},
+    {"x": 0.7004,              "y": 0.1646,              "w": 0.0879, "h": 0.1716},
+    {"x": 0.7014,              "y": 0.4133,              "w": 0.0868, "h": 0.1716},
+    {"x": 0.7004,              "y": 0.6619,              "w": 0.0879, "h": 0.1736}
 ]
 
 # ===== ランタイム状態 =====
 latest_data = {"timestamp": time.time(), "seats": [0]*NUM_SEATS, "count": 0}
 history_log = []  # [{timestamp, seats[], count}, ...]
 
-# ===== 静的配信（bus.png を static/ に置いてね） =====
+# ===== 静的配信（bus.png は static/ に置く） =====
 @app.route("/static/<path:filename>")
 def static_files(filename):
     return send_from_directory(app.static_folder, filename)
@@ -64,11 +64,11 @@ def index():
     fill:#111;
     paint-order: stroke; stroke: #fff; stroke-width: 4px;
   }}
-  /* 左上の席番号（少し下げる） */
+  /* 左上の席番号 — ★60ptに変更 */
   .seat-num {{
-    font: 700 22px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font: 700 60px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     fill:#111;
-    paint-order: stroke; stroke: #fff; stroke-width: 2px;
+    paint-order: stroke; stroke: #fff; stroke-width: 3px;
   }}
 
   .cards {{
@@ -134,11 +134,11 @@ def index():
   <script>
     // ===== Pythonから注入 =====
     const NUM_SEATS   = {NUM_SEATS};
-    const SEATS_NORM  = {seats_norm_json};   // ← 編集モードで更新してコピー可
+    const SEATS_NORM  = {seats_norm_json};
     const EDIT_MODE   = {edit_mode_js};
     const LABEL_OFFSET = 0.08;               // 中央ラベルを下げる割合（座席高さの8%）
 
-    // ★ 左列1,2,3を逆順に見せるためのラベル割り当て（下→中→上）
+    // ★ 1と3を入れ替え（見た目ラベルを ③,②,① に）
     const SEAT_NUM_LABELS = ['③','②','①','④','⑤','⑥','⑦','⑧'];
 
     let IMG_W = 0, IMG_H = 0;
@@ -180,7 +180,7 @@ def index():
         r.setAttribute('class','seat-rect free');
         r.setAttribute('id',`seat-rect-${{i}}`);
 
-        // 左上の席番号：座席高さの12%だけ下げ、左からは3%ぶん内側に
+        // 席番号（左上寄り・少し下）— 60ptに合わせてstroke少し太め
         const num = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         num.setAttribute('x', a.x + Math.max(8, a.w * 0.03));
         num.setAttribute('y', a.y + a.h * 0.12);
@@ -193,7 +193,7 @@ def index():
         t.setAttribute('x', a.x + a.w/2);
         t.setAttribute('y', a.y + a.h * (0.5 + LABEL_OFFSET));
         t.setAttribute('text-anchor','middle');
-        t.setAttribute('dominant-baseline','middle'); // 中央基準
+        t.setAttribute('dominant-baseline','middle');
         t.setAttribute('class','seat-label');
         t.setAttribute('id',`seat-label-${{i}}`);
         t.textContent = '空';
@@ -201,99 +201,6 @@ def index():
         g.appendChild(r); g.appendChild(num); g.appendChild(t); seatLayer.appendChild(g);
       }}
     }}
-
-    // ========== 編集モード（ドラッグで位置調整 & JSONコピー） ==========
-    function showEditHud() {{
-      if (!EDIT_MODE) return;
-      const hud = document.createElement('div');
-      hud.id = 'edit-hud';
-      hud.style.cssText = `
-        position:fixed; left:12px; top:12px; z-index:9999;
-        background:#111; color:#fff; padding:10px 12px; border-radius:10px;
-        box-shadow:0 10px 24px rgba(0,0,0,.25); font:14px/1.4 system-ui;
-      `;
-      hud.innerHTML = `
-        <div style="font-weight:700; margin-bottom:6px;">編集モード（ドラッグで移動）</div>
-        <div style="opacity:.85;">・座席をドラッグ＝移動<br/>・完了したら下のボタンで座標をコピー</div>
-        <button id="btn-copy-seats" style="
-          margin-top:8px; width:100%; padding:8px 10px; border-radius:8px;
-          border:0; background:#00c853; color:#fff; font-weight:700; cursor:pointer;
-        ">座標JSONをコピー</button>
-      `;
-      document.body.appendChild(hud);
-      document.getElementById('btn-copy-seats').onclick = async () => {{
-        try {{
-          await navigator.clipboard.writeText(JSON.stringify(SEATS_NORM, null, 2));
-          hud.querySelector('#btn-copy-seats').textContent = '✔ コピーしました';
-          setTimeout(()=>hud.querySelector('#btn-copy-seats').textContent='座標JSONをコピー', 1500);
-        }} catch(e) {{ alert('クリップボードにコピーできませんでした'); }}
-      }};
-    }}
-
-    function enableDragForSeats(svg) {{
-      if (!EDIT_MODE) return;
-      const seatLayer = svg.querySelector('#seat-layer');
-      if (!seatLayer) return;
-
-      let dragging = null;
-      const getMouse = (evt) => {{
-        const pt = svg.createSVGPoint();
-        pt.x = evt.clientX; pt.y = evt.clientY;
-        const m = svg.getScreenCTM().inverse();
-        return pt.matrixTransform(m);
-      }};
-      const clamp01 = (v) => Math.max(0, Math.min(1, v));
-
-      seatLayer.addEventListener('mousedown', (evt) => {{
-        const g = evt.target.closest('g[data-index]');
-        if (!g) return;
-        const idx = parseInt(g.getAttribute('data-index'), 10);
-        dragging = {{ idx, start: getMouse(evt) }};
-        evt.preventDefault();
-      }});
-
-      window.addEventListener('mousemove', (evt) => {{
-        if (!dragging) return;
-        const now = getMouse(evt);
-        const dx = now.x - dragging.start.x;
-        const dy = now.y - dragging.start.y;
-
-        // 正規化座標を更新
-        const n = SEATS_NORM[dragging.idx];
-        n.x = clamp01(n.x + dx / IMG_W);
-        n.y = clamp01(n.y + dy / IMG_H);
-
-        // DOMを更新
-        const a = {{ x: n.x*IMG_W, y: n.y*IMG_H, w: n.w*IMG_W, h: n.h*IMG_H }};
-        const r = document.getElementById(`seat-rect-${{dragging.idx}}`);
-        const t = document.getElementById(`seat-label-${{dragging.idx}}`);
-        const num = document.querySelector(`#seat-layer g[data-index="${{dragging.idx}}"] text.seat-num`);
-        if (r) {{ r.setAttribute('x', a.x); r.setAttribute('y', a.y); }}
-        if (t) {{
-          t.setAttribute('x', a.x + a.w/2);
-          t.setAttribute('y', a.y + a.h * (0.5 + LABEL_OFFSET));
-        }}
-        if (num) {{
-          num.setAttribute('x', a.x + Math.max(8, a.w * 0.03));
-          num.setAttribute('y', a.y + a.h * 0.12);
-        }}
-
-        dragging.start = now;
-      }});
-
-      window.addEventListener('mouseup', () => {{ dragging = null; }});
-    }}
-
-    (function injectEditStyle(){{
-      if (!EDIT_MODE) return;
-      const style = document.createElement('style');
-      style.textContent = `
-        #seat-layer g[data-index] {{ cursor: move; }}
-        #seat-layer rect {{ opacity: .95; }}
-      `;
-      document.head.appendChild(style);
-    }})();
-    // ===============================================================
 
     // ===== グラフ =====
     let charts=[], totalChart=null;
@@ -394,11 +301,6 @@ def index():
 
     (async () => {{
       await initBusSvg();
-      // ★ 編集モードを有効化
-      const svgEl = document.getElementById('bus-svg');
-      enableDragForSeats(svgEl);
-      showEditHud();
-
       buildTotalChart();
       buildSeatCharts();
       await refreshAll();
