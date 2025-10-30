@@ -187,7 +187,7 @@ def index():
 ];
 
     // ==== 編集モード（位置&サイズをドラッグで編集） ====
-    const EDIT_MODE = true;  // ← 調整が終わったら false にしてデプロイ！
+    const EDIT_MODE = false;  // ← 調整が終わったら false にしてデプロイ！
 
     // 画像の自然サイズ（自動取得）
     let IMG_W = 0, IMG_H = 0;
@@ -607,6 +607,7 @@ def push():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
+
 
 
 
