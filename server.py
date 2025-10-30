@@ -1,15 +1,15 @@
-# server.py — 座席ラベル80pt / 合計人数グラフ固定 / 薄型ミニグラフ
+# server.py — 座席ラベル80pt / 合計人数グラフ固定(余白あり) / ミニグラフゆったり
 from flask import Flask, jsonify, request, send_from_directory
 import time, os, json
 
 app = Flask(__name__, static_folder="static")
 
-# ===== 設定 =====
-NUM_SEATS    = 8
-MAX_HISTORY  = 360           # 5秒ごと約30分
-EDIT_MODE_FLAG = False       # 位置微調整が必要なら True に
+# ===== 基本設定 =====
+NUM_SEATS       = 8
+MAX_HISTORY     = 360            # 5秒ごと約30分
+EDIT_MODE_FLAG  = False          # 必要なら True にして座席をドラッグ調整
 
-# ===== 最終座標（あなたの提供値） =====
+# ===== 最終座標（提供してもらった値） =====
 SEATS_NORM_DATA = [
     {"x": 0.0623, "y": 0.1666, "w": 0.0858, "h": 0.1678},
     {"x": 0.0623, "y": 0.4133, "w": 0.0868, "h": 0.1716},
@@ -23,7 +23,7 @@ SEATS_NORM_DATA = [
 
 # ===== ランタイム状態 =====
 latest_data = {"timestamp": time.time(), "seats": [0]*NUM_SEATS, "count": 0}
-history_log = []  # [{timestamp, seats[], count}...]
+history_log = []  # [{timestamp, seats[], count}, ...]
 
 # ===== 静的配信 =====
 @app.route("/static/<path:filename>")
@@ -54,12 +54,12 @@ def index():
   .sub {{ color:#666; font-size:.9rem; margin-bottom:12px; }}
 
   .bus-wrap {{
-    width:100%; max-width:980px; margin:0 auto 10px auto;
+    width:100%; max-width:980px; margin:0 auto 14px auto;
     background:#f5f5f5; border-radius:12px; box-shadow:0 10px 24px rgba(0,0,0,.08);
   }}
   .seat-rect.free {{ fill:#bdbdbd; stroke:#202020; stroke-width:2; }}
   .seat-rect.occ  {{ fill:#8bdc6a; stroke:#202020; stroke-width:2; }}
-  /* ★ ラベル 80pt（視認性を上げるため白縁4px） */
+  /* ★ ラベル 80pt + 白縁で視認性UP */
   .seat-label {{
     font: 700 80px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     fill:#111;
@@ -76,16 +76,16 @@ def index():
   .big {{ font-size:2rem; font-weight:800; }}
   .muted {{ color:#666; font-size:.9rem; }}
 
-  /* ★ 合計人数グラフ（固定サイズ化） */
+  /* ★ 合計人数グラフ（固定サイズ＋ちょい余白） */
   .total-chart-wrap {{
     max-width: 980px;
-    margin: 0 auto 10px;
+    margin: 0 auto 14px;      /* 下余白を少し増やす */
     background: #fff;
     border-radius: 16px;
     box-shadow: 0 10px 24px rgba(0,0,0,.07);
-    padding: 10px;
-    height: 120px;         /* ← 好みで 80〜140px */
-    position: relative;    /* 子を絶対配置でフィット */
+    padding: 12px;            /* 内側余白を少し増やす */
+    height: 130px;            /* 固定高さ（80〜140で好み調整OK） */
+    position: relative;       /* 子キャンバスを絶対配置でフィット */
   }}
   #totalChart {{
     position: absolute; left: 0; top: 0;
@@ -93,19 +93,24 @@ def index():
     display: block;
   }}
 
-  /* ★ ミニグラフを薄型・横長に圧縮 */
+  /* ★ ミニグラフ（余白を持たせて詰め過ぎ回避） */
   .charts {{
     max-width:980px; margin:0 auto; background:#fff; border-radius:16px;
-    box-shadow:0 10px 24px rgba(0,0,0,.07); padding:8px 10px;
+    box-shadow:0 10px 24px rgba(0,0,0,.07); padding:14px;
   }}
-  .chart-row {{ display:flex; align-items:center; gap:8px; margin:2px 0; }}
-  .chart-title {{ width:64px; text-align:right; font-size:.85rem; color:#444; }}
+  .chart-row {{
+    display:flex; align-items:center; gap:12px; /* タイトルとの間隔 */
+    margin:6px 0;                               /* 行間の確保 */
+  }}
+  .chart-title {{
+    width:72px;               /* タイトル幅少し広げる */
+    text-align:right;
+    font-size:.9rem; color:#444;
+  }}
   .chart-box {{ flex:1; min-width:0; }}
-  .chart-box canvas {{ width:100%; height:36px; }}  /* ← さらに薄くしたければ 30px に */
+  .chart-box canvas {{ width:100%; height:42px; }} /* さらに薄くしたければ 38/36 に */
 
   footer {{ text-align:center; color:#888; font-size:.8rem; margin-top:12px; }}
-  #editToolbar {{ max-width:980px; margin:8px auto 0; display:flex; gap:8px; justify-content:flex-end; }}
-  #editToolbar[hidden] {{ display:none; }}
 </style>
 </head>
 <body>
@@ -203,7 +208,7 @@ def index():
         data: {{ labels: [], datasets: [{{ label: "Total", data: [], borderWidth: 2, fill: false, tension: 0.2 }}] }},
         options: {{
           responsive: true,
-          maintainAspectRatio: false,   // 親の固定高さを優先
+          maintainAspectRatio: false,      // 固定高さを優先
           animation: false,
           elements: {{ point: {{ radius: 0 }} }},
           plugins: {{ legend: {{ display:false }} }},
@@ -211,7 +216,7 @@ def index():
             y: {{ beginAtZero: true, suggestedMax: {NUM_SEATS}, ticks: {{ stepSize: 1 }} }},
             x: {{ ticks: {{ maxRotation: 0, autoSkip: true, maxTicksLimit: 8 }} }}
           }},
-          layout: {{ padding: 0 }}
+          layout: {{ padding: {{ top: 6, right: 6, bottom: 6, left: 6 }} }}  // ちょい余白
         }}
       }});
     }}
@@ -228,15 +233,15 @@ def index():
         const ctx=c.getContext("2d");
         const chart=new Chart(ctx, {{
           type:"line",
-          data:{{ labels:[], datasets:[{{ label:"S"+(i+1), data:[], borderWidth:2, fill:false, tension:0.2 }}] }},
+          data:{{ labels:[], datasets:[{{ label:"S"+(i+1), data:[], borderWidth:2, fill:false, tension: 0.2 }}] }},
           options:{{
             responsive:true, maintainAspectRatio:false, animation:false,
             plugins:{{legend:{{display:false}}}},
             scales:{{
-              y:{{ beginAtZero:true, suggestedMax:1, ticks:{{ stepSize:1, display:false }} }},
-              x:{{ ticks:{{ maxRotation:0, autoSkip:true, maxTicksLimit:6, font:{{ size:10 }} }} }}
+              y:{{ beginAtZero:true, suggestedMax:1, ticks:{{ stepSize:1, display:false }}, grid:{{ display:false }} }},
+              x:{{ ticks:{{ maxRotation:0, autoSkip:true, maxTicksLimit:6, font:{{ size:10 }} }}, grid:{{ display:false }} }}
             }},
-            layout:{{ padding:0 }},
+            layout:{{ padding: {{ top: 4, right: 4, bottom: 4, left: 4 }} }},   // ちょい余白
             elements:{{ point:{{ radius:0 }} }}
           }}
         }});
