@@ -1,4 +1,4 @@
-# server.py — ラベル+15pt / 薄型ミニグラフ / 合計人数グラフ追加版
+# server.py — 座席ラベル80pt / 合計人数グラフ固定 / 薄型ミニグラフ
 from flask import Flask, jsonify, request, send_from_directory
 import time, os, json
 
@@ -59,11 +59,11 @@ def index():
   }}
   .seat-rect.free {{ fill:#bdbdbd; stroke:#202020; stroke-width:2; }}
   .seat-rect.occ  {{ fill:#8bdc6a; stroke:#202020; stroke-width:2; }}
-  /* ★ ラベル +15pt（16→31px） */
+  /* ★ ラベル 80pt（視認性を上げるため白縁4px） */
   .seat-label {{
-    font: 700 31px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font: 700 80px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     fill:#111;
-    paint-order: stroke; stroke: #fff; stroke-width: 2px; /* 視認性UP */
+    paint-order: stroke; stroke: #fff; stroke-width: 4px;
   }}
 
   .cards {{
@@ -76,7 +76,24 @@ def index():
   .big {{ font-size:2rem; font-weight:800; }}
   .muted {{ color:#666; font-size:.9rem; }}
 
-  /* ★ グラフを薄型・横長に圧縮 */
+  /* ★ 合計人数グラフ（固定サイズ化） */
+  .total-chart-wrap {{
+    max-width: 980px;
+    margin: 0 auto 10px;
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 10px 24px rgba(0,0,0,.07);
+    padding: 10px;
+    height: 120px;         /* ← 好みで 80〜140px */
+    position: relative;    /* 子を絶対配置でフィット */
+  }}
+  #totalChart {{
+    position: absolute; left: 0; top: 0;
+    width: 100%; height: 100%;
+    display: block;
+  }}
+
+  /* ★ ミニグラフを薄型・横長に圧縮 */
   .charts {{
     max-width:980px; margin:0 auto; background:#fff; border-radius:16px;
     box-shadow:0 10px 24px rgba(0,0,0,.07); padding:8px 10px;
@@ -84,17 +101,11 @@ def index():
   .chart-row {{ display:flex; align-items:center; gap:8px; margin:2px 0; }}
   .chart-title {{ width:64px; text-align:right; font-size:.85rem; color:#444; }}
   .chart-box {{ flex:1; min-width:0; }}
-  /* ★ 1本あたり高さを約36pxへ */
-  .chart-box canvas {{ width:100%; height:36px; }}
-
-  /* ★ 合計人数グラフ（少し大きめ） */
-  .total-chart-wrap {{
-    max-width:980px; margin:0 auto 10px; background:#fff; border-radius:16px;
-    box-shadow:0 10px 24px rgba(0,0,0,.07); padding:10px;
-  }}
-  #totalChart {{ width:100%; height:60px; }}
+  .chart-box canvas {{ width:100%; height:36px; }}  /* ← さらに薄くしたければ 30px に */
 
   footer {{ text-align:center; color:#888; font-size:.8rem; margin-top:12px; }}
+  #editToolbar {{ max-width:980px; margin:8px auto 0; display:flex; gap:8px; justify-content:flex-end; }}
+  #editToolbar[hidden] {{ display:none; }}
 </style>
 </head>
 <body>
@@ -105,7 +116,7 @@ def index():
     <svg id="bus-svg" width="100%" height="auto" preserveAspectRatio="xMidYMid meet"></svg>
   </div>
 
-  <!-- 合計人数グラフ -->
+  <!-- 合計人数グラフ（固定高さ） -->
   <div class="total-chart-wrap">
     <div class="muted" style="margin-bottom:6px;">合計人数の推移</div>
     <canvas id="totalChart"></canvas>
@@ -144,7 +155,6 @@ def index():
       }});
     }}
     function normToAbs(n) {{ return {{ x:n.x*IMG_W, y:n.y*IMG_H, w:n.w*IMG_W, h:n.h*IMG_H }}; }}
-    function absToNorm(a) {{ return {{ x:a.x/IMG_W, y:a.y/IMG_H, w:a.w/IMG_W, h:a.h/IMG_H }}; }}
 
     async function initBusSvg() {{
       const svg = document.getElementById('bus-svg');
@@ -165,92 +175,21 @@ def index():
         const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
         g.setAttribute('data-index', String(i));
 
-        const {{x,y,w,h}} = normToAbs(SEATS_NORM[i]);
+        const a = normToAbs(SEATS_NORM[i]);
         const r = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        r.setAttribute('x',x); r.setAttribute('y',y);
+        r.setAttribute('x',a.x); r.setAttribute('y',a.y);
         r.setAttribute('rx',10); r.setAttribute('ry',10);
-        r.setAttribute('width',w); r.setAttribute('height',h);
+        r.setAttribute('width',a.w); r.setAttribute('height',a.h);
         r.setAttribute('class','seat-rect free');
         r.setAttribute('id',`seat-rect-${{i}}`);
 
         const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        t.setAttribute('x', x + w/2); t.setAttribute('y', y + h/2 + 6);
+        t.setAttribute('x', a.x + a.w/2); t.setAttribute('y', a.y + a.h/2 + 6);
         t.setAttribute('text-anchor','middle'); t.setAttribute('class','seat-label');
         t.setAttribute('id',`seat-label-${{i}}`); t.textContent = '空';
 
         g.appendChild(r); g.appendChild(t); seatLayer.appendChild(g);
-        if (EDIT_MODE) attachSeatEditors(svg, g, r, t, i);
       }}
-    }}
-
-    // ===（任意）編集ツール：位置＆サイズ（前バージョン通り）===
-    function attachSeatEditors(svg, group, rect, text, idx) {{
-      let dragging=false, resizing=false, which=null;
-      let start={{x:0,y:0}}, orig={{x:0,y:0,w:0,h:0}};
-      const handles = makeHandles(rect);
-      for (const c of Object.values(handles)) group.appendChild(c);
-
-      group.addEventListener('mousedown', (e) => {{
-        if (!EDIT_MODE) return;
-        const t=e.target;
-        if (t.classList.contains('handle')) {{ resizing=true; which=t.dataset.which; }}
-        else {{ dragging=true; }}
-        start = svgPoint(svg, e);
-        orig.x=+rect.getAttribute('x'); orig.y=+rect.getAttribute('y');
-        orig.w=+rect.getAttribute('width'); orig.h=+rect.getAttribute('height');
-        e.preventDefault();
-      }});
-      window.addEventListener('mousemove', (e) => {{
-        if (!EDIT_MODE) return;
-        if (!dragging && !resizing) return;
-        const p=svgPoint(svg,e); const dx=p.x-start.x, dy=p.y-start.y;
-        let nx=orig.x, ny=orig.y, nw=orig.w, nh=orig.h;
-        if (dragging) {{ nx=orig.x+dx; ny=orig.y+dy; }}
-        else if (resizing) {{
-          switch(which) {{
-            case 'tl': nx=orig.x+dx; ny=orig.y+dy; nw=orig.w-dx; nh=orig.h-dy; break;
-            case 'tr': ny=orig.y+dy; nw=orig.w+dx; nh=orig.h-dy; break;
-            case 'bl': nx=orig.x+dx; nw=orig.w-dx; nh=orig.h+dy; break;
-            case 'br': nw=orig.w+dx; nh=orig.h+dy; break;
-          }}
-        }}
-        const MIN=8;
-        nx=Math.max(0,nx); ny=Math.max(0,ny);
-        nw=Math.max(MIN,Math.min(nw,IMG_W-nx));
-        nh=Math.max(MIN,Math.min(nh,IMG_H-ny));
-        rect.setAttribute('x',nx); rect.setAttribute('y',ny);
-        rect.setAttribute('width',nw); rect.setAttribute('height',nh);
-        text.setAttribute('x', nx+nw/2); text.setAttribute('y', ny+nh/2+6);
-        updateHandlesPosition(rect, handles);
-      }});
-      window.addEventListener('mouseup', () => {{
-        if (!EDIT_MODE) return;
-        if (!dragging && !resizing) return;
-        dragging=false; resizing=false; which=null;
-        const x=+rect.getAttribute('x'), y=+rect.getAttribute('y');
-        const w=+rect.getAttribute('width'), h=+rect.getAttribute('height');
-        const norm={{x:+(x/IMG_W).toFixed(4), y:+(y/IMG_H).toFixed(4), w:+(w/IMG_W).toFixed(4), h:+(h/IMG_H).toFixed(4)}};
-        console.log(`S${{idx+1}}:`, JSON.stringify(norm));
-      }});
-    }}
-    function makeHandles(rect) {{
-      const defs=[{{which:'tl',cls:'handle tl'}},{{which:'tr',cls:'handle tr'}},{{which:'bl',cls:'handle bl'}},{{which:'br',cls:'handle br'}}];
-      const hs={{}}; for (const d of defs) {{
-        const c=document.createElementNS('http://www.w3.org/2000/svg','circle');
-        c.setAttribute('r',8); c.setAttribute('class',d.cls); c.dataset.which=d.which; hs[d.which]=c;
-      }} updateHandlesPosition(rect, hs); return hs;
-    }}
-    function updateHandlesPosition(rect, hs) {{
-      const x=+rect.getAttribute('x'), y=+rect.getAttribute('y');
-      const w=+rect.getAttribute('width'), h=+rect.getAttribute('height');
-      hs.tl?.setAttribute('cx',x);     hs.tl?.setAttribute('cy',y);
-      hs.tr?.setAttribute('cx',x+w);   hs.tr?.setAttribute('cy',y);
-      hs.bl?.setAttribute('cx',x);     hs.bl?.setAttribute('cy',y+h);
-      hs.br?.setAttribute('cx',x+w);   hs.br?.setAttribute('cy',y+h);
-    }}
-    function svgPoint(svg, evt) {{
-      const pt=svg.createSVGPoint(); pt.x=evt.clientX; pt.y=evt.clientY;
-      return pt.matrixTransform(svg.getScreenCTM().inverse());
     }}
 
     // ===== グラフ =====
@@ -258,17 +197,21 @@ def index():
 
     function buildTotalChart() {{
       const ctx = document.getElementById('totalChart').getContext('2d');
+      if (totalChart) totalChart.destroy(); // 念のため
       totalChart = new Chart(ctx, {{
         type: "line",
         data: {{ labels: [], datasets: [{{ label: "Total", data: [], borderWidth: 2, fill: false, tension: 0.2 }}] }},
         options: {{
-          responsive: true, maintainAspectRatio: false, animation: false,
+          responsive: true,
+          maintainAspectRatio: false,   // 親の固定高さを優先
+          animation: false,
+          elements: {{ point: {{ radius: 0 }} }},
           plugins: {{ legend: {{ display:false }} }},
           scales: {{
             y: {{ beginAtZero: true, suggestedMax: {NUM_SEATS}, ticks: {{ stepSize: 1 }} }},
             x: {{ ticks: {{ maxRotation: 0, autoSkip: true, maxTicksLimit: 8 }} }}
           }},
-          elements: {{ point: {{ radius: 0 }} }}
+          layout: {{ padding: 0 }}
         }}
       }});
     }}
