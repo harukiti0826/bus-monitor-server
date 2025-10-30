@@ -1,4 +1,4 @@
-# server.py — 番号を枠内に下げる版（高さの12%）/ ラベル80pt / グラフ拡大＆固定
+# server.py — 中央ラベルを少し下げる版（LABEL_OFFSET=0.08）
 from flask import Flask, jsonify, request, send_from_directory
 import time, os, json
 
@@ -43,9 +43,7 @@ def index():
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Bus Monitor</title>
 <style>
-  :root {{
-    --card-pad: 10px;
-  }}
+  :root {{ --card-pad: 10px; }}
   body {{
     font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     color:#222; background:#f5f5f5; margin:0; padding:12px 10px 60px;
@@ -54,21 +52,21 @@ def index():
   .sub {{ color:#666; font-size:.9rem; margin-bottom:12px; }}
 
   .bus-wrap {{
-    width:100%; max-width:980px; margin:0 auto 14px auto;
+    width:100%; max-width:980px; margin:0 auto 14px;
     background:#f5f5f5; border-radius:12px; box-shadow:0 10px 24px rgba(0,0,0,.08);
   }}
   .seat-rect.free {{ fill:#bdbdbd; stroke:#202020; stroke-width:2; }}
   .seat-rect.occ  {{ fill:#8bdc6a; stroke:#202020; stroke-width:2; }}
 
-  /* ★ 中央の状態ラベル（空/着座中）80pt */
+  /* 中央の状態ラベル（空/着座中）80pt */
   .seat-label {{
     font: 700 80px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     fill:#111;
     paint-order: stroke; stroke: #fff; stroke-width: 4px;
   }}
-  /* ★ 左上の席番号（少し下げる） */
+  /* 左上の席番号（下げ気味） */
   .seat-num {{
-    font: 700 60px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font: 700 22px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     fill:#111;
     paint-order: stroke; stroke: #fff; stroke-width: 2px;
   }}
@@ -83,7 +81,7 @@ def index():
   .big {{ font-size:2rem; font-weight:800; }}
   .muted {{ color:#666; font-size:.9rem; }}
 
-  /* ★ 合計人数グラフ（固定サイズ＋余白、サイズUP） */
+  /* 合計人数グラフ（固定サイズ＋余白、サイズUP） */
   .total-chart-wrap {{
     max-width: 980px;
     margin: 0 auto 16px;
@@ -91,29 +89,18 @@ def index():
     border-radius: 16px;
     box-shadow: 0 10px 24px rgba(0,0,0,.07);
     padding: 12px;
-    height: 150px;            /* 固定高さ */
+    height: 150px;
     position: relative;
   }}
-  #totalChart {{
-    position: absolute; left: 0; top: 0;
-    width: 100%; height: 100%;
-    display: block;
-  }}
+  #totalChart {{ position:absolute; left:0; top:0; width:100%; height:100%; display:block; }}
 
-  /* ★ ミニグラフ（余白あり + サイズUP） */
+  /* ミニグラフ（余白あり + サイズUP） */
   .charts {{
     max-width:980px; margin:0 auto; background:#fff; border-radius:16px;
     box-shadow:0 10px 24px rgba(0,0,0,.07); padding:16px;
   }}
-  .chart-row {{
-    display:flex; align-items:center; gap:14px;
-    margin:8px 0;
-  }}
-  .chart-title {{
-    width:78px;
-    text-align:right;
-    font-size:.95rem; color:#444;
-  }}
+  .chart-row {{ display:flex; align-items:center; gap:14px; margin:8px 0; }}
+  .chart-title {{ width:78px; text-align:right; font-size:.95rem; color:#444; }}
   .chart-box {{ flex:1; min-width:0; }}
   .chart-box canvas {{ width:100%; height:54px; }}
 
@@ -128,7 +115,6 @@ def index():
     <svg id="bus-svg" width="100%" height="auto" preserveAspectRatio="xMidYMid meet"></svg>
   </div>
 
-  <!-- 合計人数グラフ -->
   <div class="total-chart-wrap">
     <div class="muted" style="margin-bottom:6px;">合計人数の推移</div>
     <canvas id="totalChart"></canvas>
@@ -151,10 +137,10 @@ def index():
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script>
-    // ===== Pythonから安全に注入 =====
     const NUM_SEATS  = {NUM_SEATS};
     const SEATS_NORM = {seats_norm_json};
     const EDIT_MODE  = {edit_mode_js};
+    const LABEL_OFFSET = 0.08; // ★ 中央ラベルを下げる割合（座席高さの8%）
 
     let IMG_W = 0, IMG_H = 0;
 
@@ -195,7 +181,7 @@ def index():
         r.setAttribute('class','seat-rect free');
         r.setAttribute('id',`seat-rect-${{i}}`);
 
-        // ★ 左上の席番号：座席高さの12%だけ下げ、左からは3%ぶん内側に
+        // 左上の席番号：座席高さの12%だけ下げ、左からは3%ぶん内側に
         const num = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         num.setAttribute('x', a.x + Math.max(8, a.w * 0.03));
         num.setAttribute('y', a.y + a.h * 0.12);
@@ -203,11 +189,15 @@ def index():
         num.setAttribute('class','seat-num');
         num.textContent = ['①','②','③','④','⑤','⑥','⑦','⑧'][i];
 
-        // ★ 中央の状態テキスト（空 / 着座中）
+        // 中央の状態テキスト（空 / 着座中）— 中央から下方向へh*LABEL_OFFSETだけ下げる
         const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        t.setAttribute('x', a.x + a.w/2); t.setAttribute('y', a.y + a.h/2 + 6);
-        t.setAttribute('text-anchor','middle'); t.setAttribute('class','seat-label');
-        t.setAttribute('id',`seat-label-${{i}}`); t.textContent = '空';
+        t.setAttribute('x', a.x + a.w/2);
+        t.setAttribute('y', a.y + a.h * (0.5 + LABEL_OFFSET));
+        t.setAttribute('text-anchor','middle');
+        t.setAttribute('dominant-baseline','middle'); // 中央基準
+        t.setAttribute('class','seat-label');
+        t.setAttribute('id',`seat-label-${{i}}`);
+        t.textContent = '空';
 
         g.appendChild(r); g.appendChild(num); g.appendChild(t); seatLayer.appendChild(g);
       }}
@@ -289,7 +279,6 @@ def index():
       const samples=hist.samples||[];
       const labels=samples.map(s=> typeof s.timestamp==="number" ? new Date(s.timestamp*1000).toLocaleTimeString() : String(s.timestamp).slice(11,19));
 
-      // 合計人数
       const totals = samples.map(s => Number.isInteger(s.count) ? s.count : (s.seats||[]).reduce((a,v)=>a+(v===1?1:0),0));
       if (totalChart) {{
         totalChart.data.labels = labels;
@@ -297,7 +286,6 @@ def index():
         totalChart.update();
       }}
 
-      // 各席
       const series=Array.from({{length:NUM_SEATS}}, ()=>[]);
       for (const s of samples) {{
         for (let i=0;i<NUM_SEATS;i++) series[i].push((s.seats && s.seats[i]===1)?1:0);
@@ -357,4 +345,3 @@ def push():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
-
