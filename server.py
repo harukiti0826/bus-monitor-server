@@ -1,4 +1,4 @@
-# server.py  — SVGオーバーレイ + 8チャンネル時系列グラフ + 5秒自動更新
+# server.py — SVGオーバーレイ + 8chミニグラフ + 5秒自動更新（f-string安全版）
 from flask import Flask, jsonify, request, send_from_directory
 import time, os
 
@@ -121,7 +121,6 @@ def index():
     const NUM_SEATS = {NUM_SEATS};
 
     // ====== 座席正規化座標（0..1）。x,y,w,h を画像基準で記述 ======
-    // 添付の見取り図イメージに合わせた初期値。必要に応じて微調整してください。
     const SEATS_NORM = [
       // 左列 上→下
       {{x:0.095, y:0.12, w:0.095, h:0.16}}, // S1
@@ -166,8 +165,8 @@ def index():
       IMG_W = img.naturalWidth;
       IMG_H = img.naturalHeight;
 
-      // viewBox固定
-      svg.setAttribute('viewBox', `0 0 ${IMG_W} ${IMG_H}`);
+      // f-string内のJSテンプレは ${{...}} にする（Pythonに食われないように）
+      svg.setAttribute('viewBox', `0 0 ${{IMG_W}} ${{IMG_H}}`);
 
       // 背景画像
       const imageEl = document.createElementNS('http://www.w3.org/2000/svg', 'image');
