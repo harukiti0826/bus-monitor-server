@@ -1,4 +1,4 @@
-# server.py — グラフ拡大 / 座席番号ラベル追加 / ラベル80pt維持版
+# server.py — 番号を枠内に下げる版（高さの12%）/ ラベル80pt / グラフ拡大＆固定
 from flask import Flask, jsonify, request, send_from_directory
 import time, os, json
 
@@ -9,7 +9,7 @@ NUM_SEATS       = 8
 MAX_HISTORY     = 360            # 5秒ごと約30分
 EDIT_MODE_FLAG  = False          # 位置微調整が必要なら True に
 
-# ===== 最終座標（提供してもらった値） =====
+# ===== 座席座標（提供値） =====
 SEATS_NORM_DATA = [
     {"x": 0.0623, "y": 0.1666, "w": 0.0858, "h": 0.1678},
     {"x": 0.0623, "y": 0.4133, "w": 0.0868, "h": 0.1716},
@@ -60,15 +60,15 @@ def index():
   .seat-rect.free {{ fill:#bdbdbd; stroke:#202020; stroke-width:2; }}
   .seat-rect.occ  {{ fill:#8bdc6a; stroke:#202020; stroke-width:2; }}
 
-  /* ★ メインの状態ラベル（中央）80pt */
+  /* ★ 中央の状態ラベル（空/着座中）80pt */
   .seat-label {{
     font: 700 80px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     fill:#111;
     paint-order: stroke; stroke: #fff; stroke-width: 4px;
   }}
-  /* ★ 左上の席番号（固定位置・小さめ） */
+  /* ★ 左上の席番号（少し下げる） */
   .seat-num {{
-    font: 700 60px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font: 700 22px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     fill:#111;
     paint-order: stroke; stroke: #fff; stroke-width: 2px;
   }}
@@ -83,7 +83,7 @@ def index():
   .big {{ font-size:2rem; font-weight:800; }}
   .muted {{ color:#666; font-size:.9rem; }}
 
-  /* ★ 合計人数グラフ（固定サイズ＋ちょい余白、サイズUP） */
+  /* ★ 合計人数グラフ（固定サイズ＋余白、サイズUP） */
   .total-chart-wrap {{
     max-width: 980px;
     margin: 0 auto 16px;
@@ -91,7 +91,7 @@ def index():
     border-radius: 16px;
     box-shadow: 0 10px 24px rgba(0,0,0,.07);
     padding: 12px;
-    height: 150px;            /* 130→150 に拡大 */
+    height: 150px;            /* 固定高さ */
     position: relative;
   }}
   #totalChart {{
@@ -115,7 +115,7 @@ def index():
     font-size:.95rem; color:#444;
   }}
   .chart-box {{ flex:1; min-width:0; }}
-  .chart-box canvas {{ width:100%; height:54px; }} /* 42→54 に拡大 */
+  .chart-box canvas {{ width:100%; height:54px; }}
 
   footer {{ text-align:center; color:#888; font-size:.8rem; margin-top:12px; }}
 </style>
@@ -128,7 +128,7 @@ def index():
     <svg id="bus-svg" width="100%" height="auto" preserveAspectRatio="xMidYMid meet"></svg>
   </div>
 
-  <!-- 合計人数グラフ（固定高さ） -->
+  <!-- 合計人数グラフ -->
   <div class="total-chart-wrap">
     <div class="muted" style="margin-bottom:6px;">合計人数の推移</div>
     <canvas id="totalChart"></canvas>
@@ -195,14 +195,15 @@ def index():
         r.setAttribute('class','seat-rect free');
         r.setAttribute('id',`seat-rect-${{i}}`);
 
-        // ★ 左上に席番号（①〜⑧）
+        // ★ 左上の席番号：座席高さの12%だけ下げ、左からは3%ぶん内側に
         const num = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        num.setAttribute('x', a.x + 8);
-        num.setAttribute('y', a.y + 22);
+        num.setAttribute('x', a.x + Math.max(8, a.w * 0.03));
+        num.setAttribute('y', a.y + a.h * 0.12);
+        num.setAttribute('dominant-baseline', 'hanging');
         num.setAttribute('class','seat-num');
         num.textContent = ['①','②','③','④','⑤','⑥','⑦','⑧'][i];
 
-        // ★ 中央に状態テキスト（空 / 着座中）
+        // ★ 中央の状態テキスト（空 / 着座中）
         const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         t.setAttribute('x', a.x + a.w/2); t.setAttribute('y', a.y + a.h/2 + 6);
         t.setAttribute('text-anchor','middle'); t.setAttribute('class','seat-label');
@@ -217,13 +218,13 @@ def index():
 
     function buildTotalChart() {{
       const ctx = document.getElementById('totalChart').getContext('2d');
-      if (totalChart) totalChart.destroy(); // 念のため
+      if (totalChart) totalChart.destroy();
       totalChart = new Chart(ctx, {{
         type: "line",
         data: {{ labels: [], datasets: [{{ label: "Total", data: [], borderWidth: 2, fill: false, tension: 0.2 }}] }},
         options: {{
           responsive: true,
-          maintainAspectRatio: false,      // 固定高さを優先
+          maintainAspectRatio: false,
           animation: false,
           elements: {{ point: {{ radius: 0 }} }},
           plugins: {{ legend: {{ display:false }} }},
@@ -356,4 +357,3 @@ def push():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
-
