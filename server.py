@@ -1,4 +1,4 @@
-# server.py — 座席ラベル80pt / 合計人数グラフ固定(余白あり) / ミニグラフゆったり
+# server.py — グラフ拡大 / 座席番号ラベル追加 / ラベル80pt維持版
 from flask import Flask, jsonify, request, send_from_directory
 import time, os, json
 
@@ -7,7 +7,7 @@ app = Flask(__name__, static_folder="static")
 # ===== 基本設定 =====
 NUM_SEATS       = 8
 MAX_HISTORY     = 360            # 5秒ごと約30分
-EDIT_MODE_FLAG  = False          # 必要なら True にして座席をドラッグ調整
+EDIT_MODE_FLAG  = False          # 位置微調整が必要なら True に
 
 # ===== 最終座標（提供してもらった値） =====
 SEATS_NORM_DATA = [
@@ -59,11 +59,18 @@ def index():
   }}
   .seat-rect.free {{ fill:#bdbdbd; stroke:#202020; stroke-width:2; }}
   .seat-rect.occ  {{ fill:#8bdc6a; stroke:#202020; stroke-width:2; }}
-  /* ★ ラベル 80pt + 白縁で視認性UP */
+
+  /* ★ メインの状態ラベル（中央）80pt */
   .seat-label {{
     font: 700 80px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     fill:#111;
     paint-order: stroke; stroke: #fff; stroke-width: 4px;
+  }}
+  /* ★ 左上の席番号（固定位置・小さめ） */
+  .seat-num {{
+    font: 700 22px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    fill:#111;
+    paint-order: stroke; stroke: #fff; stroke-width: 2px;
   }}
 
   .cards {{
@@ -76,16 +83,16 @@ def index():
   .big {{ font-size:2rem; font-weight:800; }}
   .muted {{ color:#666; font-size:.9rem; }}
 
-  /* ★ 合計人数グラフ（固定サイズ＋ちょい余白） */
+  /* ★ 合計人数グラフ（固定サイズ＋ちょい余白、サイズUP） */
   .total-chart-wrap {{
     max-width: 980px;
-    margin: 0 auto 14px;      /* 下余白を少し増やす */
+    margin: 0 auto 16px;
     background: #fff;
     border-radius: 16px;
     box-shadow: 0 10px 24px rgba(0,0,0,.07);
-    padding: 12px;            /* 内側余白を少し増やす */
-    height: 130px;            /* 固定高さ（80〜140で好み調整OK） */
-    position: relative;       /* 子キャンバスを絶対配置でフィット */
+    padding: 12px;
+    height: 150px;            /* 130→150 に拡大 */
+    position: relative;
   }}
   #totalChart {{
     position: absolute; left: 0; top: 0;
@@ -93,22 +100,22 @@ def index():
     display: block;
   }}
 
-  /* ★ ミニグラフ（余白を持たせて詰め過ぎ回避） */
+  /* ★ ミニグラフ（余白あり + サイズUP） */
   .charts {{
     max-width:980px; margin:0 auto; background:#fff; border-radius:16px;
-    box-shadow:0 10px 24px rgba(0,0,0,.07); padding:14px;
+    box-shadow:0 10px 24px rgba(0,0,0,.07); padding:16px;
   }}
   .chart-row {{
-    display:flex; align-items:center; gap:12px; /* タイトルとの間隔 */
-    margin:6px 0;                               /* 行間の確保 */
+    display:flex; align-items:center; gap:14px;
+    margin:8px 0;
   }}
   .chart-title {{
-    width:72px;               /* タイトル幅少し広げる */
+    width:78px;
     text-align:right;
-    font-size:.9rem; color:#444;
+    font-size:.95rem; color:#444;
   }}
   .chart-box {{ flex:1; min-width:0; }}
-  .chart-box canvas {{ width:100%; height:42px; }} /* さらに薄くしたければ 38/36 に */
+  .chart-box canvas {{ width:100%; height:54px; }} /* 42→54 に拡大 */
 
   footer {{ text-align:center; color:#888; font-size:.8rem; margin-top:12px; }}
 </style>
@@ -188,12 +195,20 @@ def index():
         r.setAttribute('class','seat-rect free');
         r.setAttribute('id',`seat-rect-${{i}}`);
 
+        // ★ 左上に席番号（①〜⑧）
+        const num = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        num.setAttribute('x', a.x + 8);
+        num.setAttribute('y', a.y + 22);
+        num.setAttribute('class','seat-num');
+        num.textContent = ['①','②','③','④','⑤','⑥','⑦','⑧'][i];
+
+        // ★ 中央に状態テキスト（空 / 着座中）
         const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         t.setAttribute('x', a.x + a.w/2); t.setAttribute('y', a.y + a.h/2 + 6);
         t.setAttribute('text-anchor','middle'); t.setAttribute('class','seat-label');
         t.setAttribute('id',`seat-label-${{i}}`); t.textContent = '空';
 
-        g.appendChild(r); g.appendChild(t); seatLayer.appendChild(g);
+        g.appendChild(r); g.appendChild(num); g.appendChild(t); seatLayer.appendChild(g);
       }}
     }}
 
@@ -216,7 +231,7 @@ def index():
             y: {{ beginAtZero: true, suggestedMax: {NUM_SEATS}, ticks: {{ stepSize: 1 }} }},
             x: {{ ticks: {{ maxRotation: 0, autoSkip: true, maxTicksLimit: 8 }} }}
           }},
-          layout: {{ padding: {{ top: 6, right: 6, bottom: 6, left: 6 }} }}  // ちょい余白
+          layout: {{ padding: {{ top: 6, right: 6, bottom: 6, left: 6 }} }}
         }}
       }});
     }}
@@ -241,7 +256,7 @@ def index():
               y:{{ beginAtZero:true, suggestedMax:1, ticks:{{ stepSize:1, display:false }}, grid:{{ display:false }} }},
               x:{{ ticks:{{ maxRotation:0, autoSkip:true, maxTicksLimit:6, font:{{ size:10 }} }}, grid:{{ display:false }} }}
             }},
-            layout:{{ padding: {{ top: 4, right: 4, bottom: 4, left: 4 }} }},   // ちょい余白
+            layout:{{ padding: {{ top: 4, right: 4, bottom: 4, left: 4 }} }},
             elements:{{ point:{{ radius:0 }} }}
           }}
         }});
