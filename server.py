@@ -136,7 +136,7 @@ def index():
     ];
 
     // 編集モード（trueで座席ドラッグ→新座標をconsole出力）
-    const EDIT_MODE = false;
+    const EDIT_MODE = true;
 
     // 画像の自然サイズ（自動取得）
     let IMG_W = 0, IMG_H = 0;
@@ -421,3 +421,4 @@ def push():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
+
