@@ -344,4 +344,101 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
 
+<script>
+// ===== ここから編集モード用 追記 =====
+function showEditHud() {
+  if (!EDIT_MODE) return;
+  const hud = document.createElement('div');
+  hud.id = 'edit-hud';
+  hud.style.cssText = `
+    position:fixed; left:12px; top:12px; z-index:9999;
+    background:#111; color:#fff; padding:10px 12px; border-radius:10px;
+    box-shadow:0 10px 24px rgba(0,0,0,.25); font:14px/1.4 system-ui;
+  `;
+  hud.innerHTML = `
+    <div style="font-weight:700; margin-bottom:6px;">編集モード（ドラッグで移動）</div>
+    <div style="opacity:.85;">・座席をドラッグ＝移動<br/>・完了したら下のボタンで座標をコピー</div>
+    <button id="btn-copy-seats" style="
+      margin-top:8px; width:100%; padding:8px 10px; border-radius:8px;
+      border:0; background:#00c853; color:#fff; font-weight:700; cursor:pointer;
+    ">座標JSONをコピー</button>
+  `;
+  document.body.appendChild(hud);
+  document.getElementById('btn-copy-seats').onclick = async () => {
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(SEATS_NORM, null, 2));
+      hud.querySelector('#btn-copy-seats').textContent = '✔ コピーしました';
+      setTimeout(()=>hud.querySelector('#btn-copy-seats').textContent='座標JSONをコピー', 1500);
+    } catch(e) { alert('クリップボードにコピーできませんでした'); }
+  };
+}
+
+function enableDragForSeats(svg) {
+  if (!EDIT_MODE) return;
+  const seatLayer = svg.querySelector('#seat-layer');
+  if (!seatLayer) return;
+
+  let dragging = null; // { idx, startX, startY }
+  const getMouse = (evt) => {
+    const pt = svg.createSVGPoint();
+    pt.x = evt.clientX; pt.y = evt.clientY;
+    const m = svg.getScreenCTM().inverse();
+    return pt.matrixTransform(m);
+  };
+  const clamp01 = (v) => Math.max(0, Math.min(1, v));
+
+  seatLayer.addEventListener('mousedown', (evt) => {
+    const g = evt.target.closest('g[data-index]');
+    if (!g) return;
+    const idx = parseInt(g.getAttribute('data-index'), 10);
+    dragging = { idx, start: getMouse(evt) };
+    evt.preventDefault();
+  });
+
+  window.addEventListener('mousemove', (evt) => {
+    if (!dragging) return;
+    const now = getMouse(evt);
+    const dx = now.x - dragging.start.x;
+    const dy = now.y - dragging.start.y;
+
+    // 正規化座標を更新
+    const n = SEATS_NORM[dragging.idx];
+    n.x = clamp01(n.x + dx / IMG_W);
+    n.y = clamp01(n.y + dy / IMG_H);
+
+    // DOMを更新
+    const a = { x: n.x*IMG_W, y: n.y*IMG_H, w: n.w*IMG_W, h: n.h*IMG_H };
+    const r = document.getElementById(`seat-rect-${dragging.idx}`);
+    const t = document.getElementById(`seat-label-${dragging.idx}`);
+    const num = document.querySelector(`#seat-layer g[data-index="${dragging.idx}"] text.seat-num`);
+    if (r) { r.setAttribute('x', a.x); r.setAttribute('y', a.y); }
+    if (t) {
+      const LABEL_OFFSET = 0.08;
+      t.setAttribute('x', a.x + a.w/2);
+      t.setAttribute('y', a.y + a.h * (0.5 + LABEL_OFFSET));
+    }
+    if (num) {
+      num.setAttribute('x', a.x + Math.max(8, a.w * 0.03));
+      num.setAttribute('y', a.y + a.h * 0.12);
+    }
+
+    // 新しい基準に
+    dragging.start = now;
+  });
+
+  window.addEventListener('mouseup', () => { dragging = null; });
+}
+
+(function injectEditStyle(){
+  if (!EDIT_MODE) return;
+  const style = document.createElement('style');
+  style.textContent = `
+    #seat-layer g[data-index] { cursor: move; }
+    #seat-layer rect { opacity: .95; }
+  `;
+  document.head.appendChild(style);
+})();
+// ===== ここまで編集モード用 追記 =====
+</script>
+
 
