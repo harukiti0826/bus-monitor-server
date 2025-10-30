@@ -1,4 +1,4 @@
-# server.py — SVGオーバーレイ + 8chミニグラフ + 5秒自動更新（f-string安全版）
+# server.py — SVGオーバーレイ + 8chミニグラフ + 編集モード(位置&サイズ) + 一括ダンプ
 from flask import Flask, jsonify, request, send_from_directory
 import time, os
 
@@ -60,6 +60,11 @@ def index():
     fill:#111;
   }}
 
+  /* === 編集ハンドル === */
+  .handle {{ fill:#fff; stroke:#111; stroke-width:2; }}
+  .handle.tl, .handle.br {{ cursor: nwse-resize; }}
+  .handle.tr, .handle.bl {{ cursor: nesw-resize; }}
+
   /* ===== カード ===== */
   .cards {{
     display:flex; gap:12px; flex-wrap:wrap; margin:12px auto 18px; max-width:980px;
@@ -96,6 +101,14 @@ def index():
     <svg id="bus-svg" width="100%" height="auto" preserveAspectRatio="xMidYMid meet"></svg>
   </div>
 
+  <!-- 編集用ツールバー（本番時は消してOK） -->
+  <div style="max-width:980px;margin:8px auto 0;display:flex;gap:8px;justify-content:flex-end;">
+    <button id="dumpBtn" style="padding:.5rem .8rem;border-radius:8px;border:1px solid #ccc;background:#fff;cursor:pointer;">
+      現在座標をコンソールに出力
+    </button>
+    <span id="editHint" style="color:#666;font-size:.9rem;"></span>
+  </div>
+
   <!-- ===== 数字カード ===== -->
   <div class="cards">
     <div class="card">
@@ -121,6 +134,7 @@ def index():
     const NUM_SEATS = {NUM_SEATS};
 
     // ====== 座席正規化座標（0..1）。x,y,w,h を画像基準で記述 ======
+    // 位置合わせ後はここにペーストで確定！
     const SEATS_NORM = [
       // 左列 上→下
       {{x:0.095, y:0.12, w:0.095, h:0.16}}, // S1
@@ -135,8 +149,8 @@ def index():
       {{x:0.83,  y:0.66, w:0.095, h:0.16}}  // S8
     ];
 
-    // 編集モード（trueで座席ドラッグ→新座標をconsole出力）
-    const EDIT_MODE = true;
+    // ==== 編集モード（位置&サイズをドラッグで編集） ====
+    const EDIT_MODE = true;  // ← 調整が終わったら false にしてデプロイ！
 
     // 画像の自然サイズ（自動取得）
     let IMG_W = 0, IMG_H = 0;
@@ -209,39 +223,152 @@ def index():
         g.appendChild(t);
         seatLayer.appendChild(g);
 
-        if (EDIT_MODE) enableDrag(svg, g, r, t, i);
+        if (EDIT_MODE) {{
+          attachSeatEditors(svg, g, r, t, i);  // 位置＆サイズ編集を有効化
+        }}
+      }}
+
+      // 編集ヒント表示
+      const hint = document.getElementById('editHint');
+      if (EDIT_MODE && hint) {{
+        hint.textContent = '編集モード: 四角ドラッグ=移動 / 四隅丸ドラッグ=サイズ / 右のボタンで全席座標を出力';
+      }} else if (hint) {{
+        hint.textContent = '';
       }}
     }}
 
-    function enableDrag(svg, group, rect, text, idx) {{
-      let dragging = false, start = {{x:0,y:0}}, orig = {{x:0,y:0}};
-      group.addEventListener('mousedown', e => {{
+    // === 角ハンドルつきエディタ ===
+    function attachSeatEditors(svg, group, rect, text, idx) {{
+      let dragging = false, resizing = false;
+      let which = null; // 'tl' | 'tr' | 'bl' | 'br'
+      let start = {{x:0, y:0}};
+      let orig  = {{x:0, y:0, w:0, h:0}};
+
+      // 四隅ハンドルを作成
+      const handles = makeHandles(rect);
+      for (const c of Object.values(handles)) group.appendChild(c);
+
+      // move: 四角をつかんで移動 or ハンドルでリサイズ
+      group.addEventListener('mousedown', (e) => {{
         if (!EDIT_MODE) return;
-        dragging = true;
+
+        const target = e.target;
+        if (target.classList.contains('handle')) {{
+          resizing = true;
+          which = target.dataset.which; // tl/tr/bl/br
+        }} else {{
+          dragging = true;
+        }}
+
         start = svgPoint(svg, e);
-        orig = {{ x: parseFloat(rect.getAttribute('x')), y: parseFloat(rect.getAttribute('y')) }};
+        orig.x = parseFloat(rect.getAttribute('x'));
+        orig.y = parseFloat(rect.getAttribute('y'));
+        orig.w = parseFloat(rect.getAttribute('width'));
+        orig.h = parseFloat(rect.getAttribute('height'));
+        e.preventDefault();
       }});
-      window.addEventListener('mousemove', e => {{
-        if (!EDIT_MODE || !dragging) return;
+
+      window.addEventListener('mousemove', (e) => {{
+        if (!EDIT_MODE) return;
+        if (!dragging && !resizing) return;
+
         const p = svgPoint(svg, e);
         const dx = p.x - start.x;
         const dy = p.y - start.y;
-        rect.setAttribute('x', orig.x + dx);
-        rect.setAttribute('y', orig.y + dy);
-        text.setAttribute('x', orig.x + dx + parseFloat(rect.getAttribute('width'))/2);
-        text.setAttribute('y', orig.y + dy + parseFloat(rect.getAttribute('height'))/2 + 6);
+
+        let nx = orig.x, ny = orig.y, nw = orig.w, nh = orig.h;
+
+        if (dragging) {{
+          nx = orig.x + dx;
+          ny = orig.y + dy;
+        }} else if (resizing) {{
+          switch (which) {{
+            case 'tl': nx = orig.x + dx; ny = orig.y + dy; nw = orig.w - dx; nh = orig.h - dy; break;
+            case 'tr': ny = orig.y + dy; nw = orig.w + dx; nh = orig.h - dy; break;
+            case 'bl': nx = orig.x + dx; nw = orig.w - dx; nh = orig.h + dy; break;
+            case 'br': nw = orig.w + dx; nh = orig.h + dy; break;
+          }}
+        }}
+
+        // 最小サイズ＆画像範囲にクリップ
+        const MIN = 8; // px
+        nx = Math.max(0, nx);
+        ny = Math.max(0, ny);
+        nw = Math.max(MIN, Math.min(nw, IMG_W - nx));
+        nh = Math.max(MIN, Math.min(nh, IMG_H - ny));
+
+        rect.setAttribute('x', nx);
+        rect.setAttribute('y', ny);
+        rect.setAttribute('width',  nw);
+        rect.setAttribute('height', nh);
+
+        text.setAttribute('x', nx + nw/2);
+        text.setAttribute('y', ny + nh/2 + 6);
+
+        updateHandlesPosition(rect, handles);
       }});
+
       window.addEventListener('mouseup', () => {{
-        if (!EDIT_MODE || !dragging) return;
-        dragging = false;
+        if (!EDIT_MODE) return;
+        if (!dragging && !resizing) return;
+        dragging = false; resizing = false; which = null;
+
+        // 正規化座標でログ
         const x = parseFloat(rect.getAttribute('x'));
         const y = parseFloat(rect.getAttribute('y'));
         const w = parseFloat(rect.getAttribute('width'));
         const h = parseFloat(rect.getAttribute('height'));
-        const norm = absToNorm({{x,y,w,h}});
+        const norm = {{
+          x: +(x/IMG_W).toFixed(4),
+          y: +(y/IMG_H).toFixed(4),
+          w: +(w/IMG_W).toFixed(4),
+          h: +(h/IMG_H).toFixed(4)
+        }};
         console.log(`S${{idx+1}}:`, JSON.stringify(norm));
       }});
     }}
+
+    // 四隅ハンドルの生成
+    function makeHandles(rect) {{
+      const defs = [
+        {{ which:'tl', cls:'handle tl' }},
+        {{ which:'tr', cls:'handle tr' }},
+        {{ which:'bl', cls:'handle bl' }},
+        {{ which:'br', cls:'handle br' }},
+      ];
+      const hs = {{}};
+      for (const d of defs) {{
+        const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        c.setAttribute('r', 8);               // ハンドルの大きさ
+        c.setAttribute('class', d.cls);
+        c.dataset.which = d.which;
+        hs[d.which] = c;
+      }}
+      updateHandlesPosition(rect, hs);
+      return hs;
+    }}
+
+    // ハンドル位置の更新（rectの四隅）
+    function updateHandlesPosition(rect, hs) {{
+      const x = parseFloat(rect.getAttribute('x'));
+      const y = parseFloat(rect.getAttribute('y'));
+      const w = parseFloat(rect.getAttribute('width'));
+      const h = parseFloat(rect.getAttribute('height'));
+
+      hs.tl?.setAttribute('cx', x);
+      hs.tl?.setAttribute('cy', y);
+
+      hs.tr?.setAttribute('cx', x + w);
+      hs.tr?.setAttribute('cy', y);
+
+      hs.bl?.setAttribute('cx', x);
+      hs.bl?.setAttribute('cy', y + h);
+
+      hs.br?.setAttribute('cx', x + w);
+      hs.br?.setAttribute('cy', y + h);
+    }}
+
+    // 画面座標→SVG座標
     function svgPoint(svg, evt) {{
       const pt = svg.createSVGPoint();
       pt.x = evt.clientX; pt.y = evt.clientY;
@@ -360,6 +487,28 @@ def index():
       }}
     }}
 
+    // 一括ダンプ：現在の座標(正規化)を全席分コンソールに出力
+    function dumpAllSeatNorms() {{
+      const out = [];
+      for (let i=0; i<NUM_SEATS; i++) {{
+        const r = document.getElementById(`seat-rect-${{i}}`);
+        if (!r) continue;
+        const x = parseFloat(r.getAttribute('x'));
+        const y = parseFloat(r.getAttribute('y'));
+        const w = parseFloat(r.getAttribute('width'));
+        const h = parseFloat(r.getAttribute('height'));
+        out.push({{
+          x: +(x/IMG_W).toFixed(4),
+          y: +(y/IMG_H).toFixed(4),
+          w: +(w/IMG_W).toFixed(4),
+          h: +(h/IMG_H).toFixed(4),
+        }});
+      }}
+      console.log("=== SEATS_NORM paste this ===");
+      console.log(JSON.stringify(out, null, 2));
+    }}
+    document.getElementById('dumpBtn')?.addEventListener('click', dumpAllSeatNorms);
+
     async function refreshAll() {{
       try {{
         await updateStatus();
@@ -421,4 +570,5 @@ def push():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
+
 
