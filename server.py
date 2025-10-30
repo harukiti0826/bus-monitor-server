@@ -1,4 +1,4 @@
-# server.py — 中央ラベルを少し下げる版（LABEL_OFFSET=0.08）
+# server.py — 左列1,2,3の番号を逆順表示 / 番号&中央ラベルの位置調整 / グラフ拡大＆固定
 from flask import Flask, jsonify, request, send_from_directory
 import time, os, json
 
@@ -64,9 +64,9 @@ def index():
     fill:#111;
     paint-order: stroke; stroke: #fff; stroke-width: 4px;
   }}
-  /* 左上の席番号（下げ気味） */
+  /* 左上の席番号（少し下げる） */
   .seat-num {{
-    font: 700 60px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font: 700 22px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     fill:#111;
     paint-order: stroke; stroke: #fff; stroke-width: 2px;
   }}
@@ -83,14 +83,9 @@ def index():
 
   /* 合計人数グラフ（固定サイズ＋余白、サイズUP） */
   .total-chart-wrap {{
-    max-width: 980px;
-    margin: 0 auto 16px;
-    background: #fff;
-    border-radius: 16px;
-    box-shadow: 0 10px 24px rgba(0,0,0,.07);
-    padding: 12px;
-    height: 150px;
-    position: relative;
+    max-width: 980px; margin: 0 auto 16px; background: #fff;
+    border-radius: 16px; box-shadow: 0 10px 24px rgba(0,0,0,.07);
+    padding: 12px; height: 150px; position: relative;
   }}
   #totalChart {{ position:absolute; left:0; top:0; width:100%; height:100%; display:block; }}
 
@@ -137,10 +132,13 @@ def index():
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script>
+    // ===== Pythonから安全に注入 =====
     const NUM_SEATS  = {NUM_SEATS};
     const SEATS_NORM = {seats_norm_json};
     const EDIT_MODE  = {edit_mode_js};
-    const LABEL_OFFSET = 0.08; // ★ 中央ラベルを下げる割合（座席高さの8%）
+    const LABEL_OFFSET = 0.08;      // ★ 中央ラベルを少し下へ（座席高さの8%）
+    // ★ 左列1,2,3を逆順に見せるためのラベル割り当て（下→中→上）
+    const SEAT_NUM_LABELS = ['③','②','①','④','⑤','⑥','⑦','⑧'];
 
     let IMG_W = 0, IMG_H = 0;
 
@@ -181,15 +179,15 @@ def index():
         r.setAttribute('class','seat-rect free');
         r.setAttribute('id',`seat-rect-${{i}}`);
 
-        // 左上の席番号：座席高さの12%だけ下げ、左からは3%ぶん内側に
+        // ★ 左上の席番号：座席高さの12%だけ下げ、左からは3%ぶん内側に
         const num = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         num.setAttribute('x', a.x + Math.max(8, a.w * 0.03));
         num.setAttribute('y', a.y + a.h * 0.12);
         num.setAttribute('dominant-baseline', 'hanging');
         num.setAttribute('class','seat-num');
-        num.textContent = ['①','②','③','④','⑤','⑥','⑦','⑧'][i];
+        num.textContent = SEAT_NUM_LABELS[i];   // ← ここで逆順ラベルを適用
 
-        // 中央の状態テキスト（空 / 着座中）— 中央から下方向へh*LABEL_OFFSETだけ下げる
+        // ★ 中央の状態テキスト（空 / 着座中）— 中央から下方向へh*LABEL_OFFSETだけ下げる
         const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         t.setAttribute('x', a.x + a.w/2);
         t.setAttribute('y', a.y + a.h * (0.5 + LABEL_OFFSET));
@@ -345,4 +343,3 @@ def push():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
-
