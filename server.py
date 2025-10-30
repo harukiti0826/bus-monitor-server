@@ -1,411 +1,351 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_from_directory
 import time, os
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder="static")
 
+# ====== 座席数（8ch） ======
+NUM_SEATS = 8
+
+# ====== 最新状態 + 履歴 ======
 latest_data = {
     "timestamp": time.time(),
-    "seats": [0, 1, 0, 0, 1, 0, 0, 0, 0, 0],
-    "count": 2
+    "seats": [0]*NUM_SEATS,
+    "count": 0
 }
+history_log = []         # 各要素: {"timestamp": <float or str>, "seats": [0/1...], "count": int}
+MAX_HISTORY = 360        # 5秒周期で約30分分
 
-# ★追加：履歴を保持
-history_log = []  # 各要素: { "timestamp": str(or float), "count": int, "seats": [...] }
+# 静的ファイル（バス図）
+@app.route("/static/<path:filename>")
+def static_files(filename):
+    return send_from_directory(app.static_folder, filename)
 
-MAX_HISTORY = 300  # 保存上限（約300サンプルぶんなど）
-
-
+# ====== メインダッシュボード ======
 @app.route("/")
 def index():
-    # メインダッシュボード（5秒自動更新）
-    return """
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="utf-8" />
-        <title>Bus Monitor Dashboard</title>
+    return f"""
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Bus Monitor</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+  body {{
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color: #222; background:#f5f5f5; margin:0; padding:0 10px 60px;
+  }}
+  h1 {{
+    font-size: 1.4rem; display:flex; gap:.5rem; align-items:center; margin:16px 0 8px;
+  }}
+  .sub {{
+    color:#666; font-size:.9rem; margin-bottom:14px;
+  }}
 
-        <style>
-            body {
-                font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-                max-width: 900px;
-                margin: 1.5rem auto 4rem auto;
-                line-height: 1.5;
-                color: #222;
-                background: #f5f5f5;
-            }
+  /* ===== バス図オーバーレイ ===== */
+  .bus-wrap {{
+    position: relative;
+    width: 100%;
+    max-width: 980px;
+    margin: 0 auto 14px auto;
+    aspect-ratio: 16 / 9;      /* 画像比率目安。合わなければ後で微調整OK */
+    background: #ddd url('/static/bus.png') center/contain no-repeat;
+    border-radius: 12px;
+    box-shadow: 0 10px 24px rgba(0,0,0,.08);
+  }}
+  .seat-overlay {{
+    position: absolute;
+    width: 9.5%;      /* 各座席札の幅（％で指定） */
+    height: 16%;
+    border: 2px solid #202020;
+    border-radius: 6px;
+    display:flex; align-items:center; justify-content:center;
+    font-weight:700;
+    box-shadow: 0 6px 16px rgba(0,0,0,.12);
+  }}
+  .free  {{ background:#bdbdbd; color:#111; }}
+  .occ   {{ background:#8bdc6a; color:#111; }}
 
-            header {
-                display: flex;
-                align-items: flex-end;
-                justify-content: space-between;
-                flex-wrap: wrap;
-                gap: 1rem;
-                margin-bottom: 1.5rem;
-            }
+  /* ===== 数字カード ===== */
+  .cards {{
+    display:flex; gap:12px; flex-wrap:wrap; margin:12px auto 18px; max-width:980px;
+  }}
+  .card {{
+    background:#fff; padding:12px 14px; border-radius:12px;
+    box-shadow:0 10px 24px rgba(0,0,0,.07); min-width:220px;
+  }}
+  .big   {{ font-size:2rem; font-weight:800; }}
+  .muted {{ color:#666; font-size:.9rem; }}
 
-            .left-head {
-                display: flex;
-                flex-direction: column;
-            }
+  /* ===== ミニグラフ（8本縦積み） ===== */
+  .charts {{
+    max-width:980px; margin:0 auto;
+    background:#fff; border-radius:16px; box-shadow:0 10px 24px rgba(0,0,0,.07);
+    padding:12px;
+  }}
+  .chart-row {{
+    display:flex; align-items:center; gap:10px; margin:6px 0;
+  }}
+  .chart-title {{ width:70px; text-align:right; font-size:.9rem; color:#444; }}
+  .chart-box   {{ flex:1; }}
+  canvas       {{ width:100%; height:70px; }}
+  footer {{ text-align:center; color:#888; font-size:.8rem; margin-top:14px; }}
+</style>
+</head>
+<body>
+  <h1>🚌 Bus Monitor</h1>
+  <div class="sub">last update: <span id="ts">---</span> / 5秒ごとに自動更新〜ザウルス</div>
 
-            .title-row {
-                font-size: 1.4rem;
-                font-weight: 600;
-                display: flex;
-                align-items: center;
-                gap: .5rem;
-            }
+  <!-- ===== バス図オーバーレイ ===== -->
+  <div class="bus-wrap" id="bus">
+    <!-- JSで座席オーバーレイ（8個）を生成します -->
+  </div>
 
-            .timestamp {
-                font-size: .9rem;
-                color: #555;
-            }
+  <!-- ===== 数字カード ===== -->
+  <div class="cards">
+    <div class="card">
+      <div class="muted">現在乗車中</div>
+      <div class="big"><span id="count">0</span> 人</div>
+    </div>
+    <div class="card">
+      <div class="muted">席配列</div>
+      <div style="font-family:monospace" id="seats">[0,0,0,0,0,0,0,0]</div>
+    </div>
+  </div>
 
-            .count-box {
-                background: white;
-                border-radius: 12px;
-                box-shadow: 0 10px 24px rgba(0,0,0,0.07);
-                padding: 1rem 1.2rem;
-                min-width: 200px;
-                flex-shrink: 0;
-            }
-            .count-label {
-                font-size: .9rem;
-                color: #666;
-            }
-            .count-value {
-                font-size: 2rem;
-                font-weight: 700;
-                color: #222;
-            }
+  <!-- ===== ミニグラフ（8本） ===== -->
+  <div class="charts" id="charts">
+    <!-- Seat1..Seat8 の行をJSで生成 -->
+  </div>
 
-            /* 座席ボード */
-            .panel {
-                background: white;
-                border-radius: 16px;
-                box-shadow: 0 10px 24px rgba(0,0,0,0.07);
-                padding: 1rem 1.2rem 1.2rem 1.2rem;
-                margin-bottom: 1.5rem;
-            }
+  <footer>Render配信中🟢 / Chart.js & custom overlay 🦖</footer>
 
-            .panel-title {
-                font-weight: 600;
-                font-size: 1rem;
-                margin-bottom: .5rem;
-                display: flex;
-                align-items: baseline;
-                justify-content: space-between;
-                flex-wrap: wrap;
-            }
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+    // ====== 座席数（JS側も8に合わせる） ======
+    const NUM_SEATS = {NUM_SEATS};
 
-            .seats-grid {
-                display: grid;
-                grid-template-columns: repeat(2, minmax(120px,1fr));
-                gap: 12px;
-                max-width: 320px;
-            }
+    // ====== バス図の座席オーバーレイ座標（%単位） ======
+    //   top/left/width/height を % で指定（画像に対する相対位置）。
+    //   添付の図に合わせて初期値を置いています。微調整はここをいじればOK。
+    //   座席の並び: S1..S8（管理PCの並びに合わせて対応づけてね）
+    const SEAT_POS = [
+      // 左列 上→下
+      {{top:12, left:9.5,  w:9.5, h:16}},  // S1
+      {{top:39, left:9.5,  w:9.5, h:16}},  // S2
+      {{top:66, left:9.5,  w:9.5, h:16}},  // S3
 
-            .seat-card {
-                border-radius: 12px;
-                padding: .8rem;
-                font-size: .95rem;
-                font-weight: 600;
-                text-align: left;
-                line-height: 1.4;
-                background: #fafafa;
-                border: 1px solid #ddd;
-                box-shadow: 0 6px 16px rgba(0,0,0,0.06);
-                display: flex;
-                align-items: center;
-                gap: .8rem;
-            }
+      // 中列（例：中央2席）
+      {{top:17, left:44,  w:9.5, h:16}},   // S4
+      {{top:17, left:58,  w:9.5, h:16}},   // S5
 
-            .led {
-                width: 20px;
-                height: 20px;
-                border-radius: 50%;
-                box-shadow: 0 0 10px rgba(0,0,0,0.3);
-                border: 2px solid rgba(0,0,0,0.2);
-            }
+      // 右列 上→下
+      {{top:12, left:83,  w:9.5, h:16}},   // S6
+      {{top:39, left:83,  w:9.5, h:16}},   // S7
+      {{top:66, left:83,  w:9.5, h:16}},   // S8
+    ];
 
-            .led-on {
-                background: #2ecc71; /* occupied = green */
-            }
-            .led-off {
-                background: #777; /* free = gray */
-            }
+    // ====== DOM構築：オーバーレイ座席札を作成 ======
+    function buildSeatOverlays() {{
+      const bus = document.getElementById("bus");
+      bus.innerHTML = "";
+      for (let i=0; i<NUM_SEATS; i++) {{
+        const pos = SEAT_POS[i];
+        const d = document.createElement("div");
+        d.className = "seat-overlay free";
+        d.style.top = pos.top + "%";
+        d.style.left = pos.left + "%";
+        d.style.width = pos.w + "%";
+        d.style.height = pos.h + "%";
+        d.id = "seatbox_"+i;
+        d.textContent = "空";
+        bus.appendChild(d);
+      }}
+    }}
 
-            .seat-info-line {
-                display: flex;
-                flex-direction: column;
-            }
-            .seat-label {
-                font-weight: 600;
-            }
-            .seat-state {
-                font-size: .8rem;
-                color: #444;
-            }
+    // ====== ミニグラフ 8本を生成 ======
+    let charts = [];
+    function buildCharts() {{
+      const wrap = document.getElementById("charts");
+      wrap.innerHTML = "";
+      charts = [];
+      for (let i=0; i<NUM_SEATS; i++) {{
+        const row = document.createElement("div");
+        row.className = "chart-row";
 
-            /* グラフ部分 */
-            .chart-wrap {
-                background: white;
-                border-radius: 16px;
-                box-shadow: 0 10px 24px rgba(0,0,0,0.07);
-                padding: 1rem 1.2rem 1.2rem 1.2rem;
-            }
+        const title = document.createElement("div");
+        title.className = "chart-title";
+        title.textContent = "Seat " + (i+1);
 
-            canvas {
-                max-width: 100%;
-            }
+        const box = document.createElement("div");
+        box.className = "chart-box";
+        const c = document.createElement("canvas");
+        c.id = "cv_"+i;
+        box.appendChild(c);
 
-            footer {
-                text-align: center;
-                font-size: .8rem;
-                color: #888;
-                margin-top: 2rem;
-            }
+        row.appendChild(title);
+        row.appendChild(box);
+        wrap.appendChild(row);
 
-            .note-row {
-                font-size: .8rem;
-                color: #555;
-                margin-top: .25rem;
-            }
-        </style>
-    </head>
-    <body>
+        // Chartインスタンス（空で初期化）
+        const ctx = c.getContext("2d");
+        const chart = new Chart(ctx, {{
+          type: "line",
+          data: {{
+            labels: [],
+            datasets: [{{
+              label: "S"+(i+1),
+              data: [],
+              borderWidth: 2,
+              fill: false,
+              tension: 0.2
+            }}]
+          }},
+          options: {{
+            responsive: true,
+            animation: false,
+            plugins: {{ legend: {{ display:false }} }},
+            scales: {{
+              y: {{
+                beginAtZero:true, suggestedMax:1,
+                ticks: {{ stepSize:1 }}
+              }},
+              x: {{
+                ticks: {{ maxRotation:0, autoSkip:true, maxTicksLimit:6 }}
+              }}
+            }}
+          }}
+        }});
+        charts.push(chart);
+      }}
+    }}
 
-        <header>
-            <div class="left-head">
-                <div class="title-row">
-                    <div style="font-size:1.5rem;">🚌</div>
-                    <div>Bus Monitor</div>
-                </div>
-                <div class="timestamp">last update: <span id="last-ts">---</span></div>
-            </div>
+    // ====== /status を取得して、数/座席オーバーレイ更新 ======
+    async function updateStatus() {{
+      const r = await fetch("/status");
+      const data = await r.json();
 
-            <div class="count-box">
-                <div class="count-label">現在乗車中</div>
-                <div class="count-value"><span id="count-num">0</span> 人</div>
-            </div>
-        </header>
+      // タイムスタンプ表示
+      const ts = data.timestamp;
+      let tsStr = ts;
+      if (typeof ts === "number") {{
+        const d = new Date(ts*1000);
+        tsStr = d.toLocaleString();
+      }}
+      document.getElementById("ts").textContent = tsStr || "---";
 
-        <section class="panel">
-            <div class="panel-title">
-                <div>座席ステータス</div>
-                <div class="note-row">● 緑=着座中 / 灰=空席</div>
-            </div>
+      // 人数
+      document.getElementById("count").textContent = (data.count ?? 0);
 
-            <div class="seats-grid" id="seats-grid">
-                <!-- JSでSeat1〜Seat10をここに描画 -->
-            </div>
-        </section>
+      // 座席配列
+      const seats = (data.seats || []).slice(0, NUM_SEATS);
+      document.getElementById("seats").textContent = JSON.stringify(seats);
 
-        <section class="chart-wrap">
-            <div class="panel-title">
-                <div>乗車人数の推移</div>
-                <div class="note-row">最新 ~ 過去 (最大300点)</div>
-            </div>
-            <canvas id="chartSeats" height="200"></canvas>
-        </section>
+      // オーバーレイの色/表示更新
+      for (let i=0; i<NUM_SEATS; i++) {{
+        const d = document.getElementById("seatbox_"+i);
+        if (!d) continue;
+        if (seats[i] === 1) {{
+          d.classList.remove("free");
+          d.classList.add("occ");
+          d.textContent = "着座中";
+        }} else {{
+          d.classList.remove("occ");
+          d.classList.add("free");
+          d.textContent = "空";
+        }}
+      }}
+    }}
 
-        <footer>
-            5秒ごとに自動更新中 / Renderで配信中〜ザウルス🦖
-        </footer>
+    // ====== /history を取得して、8本のチャートに反映 ======
+    async function updateCharts() {{
+      const r = await fetch("/history");
+      const hist = await r.json();
+      const samples = hist.samples || [];  // 古→新の順で返ってくる想定
 
-        <!-- グラフ用ライブラリ Chart.js CDN -->
-        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+      // ラベル（時間）
+      const labels = samples.map(s => {{
+        if (typeof s.timestamp === "number") {{
+          return new Date(s.timestamp*1000).toLocaleTimeString();
+        }} else {{
+          return String(s.timestamp).slice(11,19);  // "HH:MM:SS"
+        }}
+      }});
 
-        <script>
-        // --- DOM更新系 ---
+      // 各席の系列を作る
+      const series = Array.from({{length:NUM_SEATS}}, () => []);
+      for (const s of samples) {{
+        for (let i=0; i<NUM_SEATS; i++) {{
+          const v = (s.seats && s.seats[i] === 1) ? 1 : 0;
+          series[i].push(v);
+        }}
+      }}
 
-        function renderSeats(seatsArray) {
-            const grid = document.getElementById("seats-grid");
-            grid.innerHTML = "";
+      // 8本分のチャートを更新
+      for (let i=0; i<NUM_SEATS; i++) {{
+        const ch = charts[i];
+        if (!ch) continue;
+        ch.data.labels = labels;
+        ch.data.datasets[0].data = series[i];
+        ch.update();
+      }}
+    }}
 
-            for (let i = 0; i < 10; i++) {
-                const occupied = (seatsArray && seatsArray[i] === 1);
+    async function refreshAll() {{
+      try {{
+        await updateStatus();
+        await updateCharts();
+      }} catch(e) {{
+        console.error(e);
+      }}
+    }}
 
-                const card = document.createElement("div");
-                card.className = "seat-card";
-
-                const led = document.createElement("div");
-                led.className = "led " + (occupied ? "led-on" : "led-off");
-
-                const info = document.createElement("div");
-                info.className = "seat-info-line";
-                info.innerHTML = `
-                    <div class="seat-label">Seat ${i+1}</div>
-                    <div class="seat-state">${occupied ? "着座中" : "空"}</div>
-                `;
-
-                card.appendChild(led);
-                card.appendChild(info);
-                grid.appendChild(card);
-            }
-        }
-
-        async function fetchStatusAndUpdate() {
-            try {
-                const res = await fetch("/status");
-                const data = await res.json();
-
-                // timestamp 表示成形
-                const tsRaw = data.timestamp;
-                let tsReadable = tsRaw;
-                if (typeof tsRaw === "number") {
-                    const d = new Date(tsRaw * 1000);
-                    tsReadable = d.toLocaleString();
-                }
-
-                document.getElementById("last-ts").textContent = tsReadable || "---";
-                document.getElementById("count-num").textContent = (data.count ?? "0");
-
-                renderSeats(data.seats);
-            } catch (err) {
-                console.error("fetchStatusAndUpdate failed:", err);
-            }
-        }
-
-        // --- グラフ用 ---
-
-        let chartRef = null;
-
-        function initOrUpdateChart(labels, counts) {
-            const ctx = document.getElementById("chartSeats").getContext("2d");
-
-            if (!chartRef) {
-                chartRef = new Chart(ctx, {
-                    type: "line",
-                    data: {
-                        labels: labels,
-                        datasets: [{
-                            label: "乗車人数",
-                            data: counts,
-                            borderWidth: 2,
-                            fill: false,
-                            tension: 0.2
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        animation: false,
-                        scales: {
-                            y: {
-                                beginAtZero: true,
-                                ticks: {
-                                    // 人数は0～10くらい想定？
-                                    stepSize: 1
-                                }
-                            },
-                            x: {
-                                ticks: {
-                                    maxRotation: 0,
-                                    autoSkip: true,
-                                    maxTicksLimit: 5
-                                }
-                            }
-                        },
-                        plugins: {
-                            legend: {
-                                display: true
-                            }
-                        }
-                    }
-                });
-            } else {
-                chartRef.data.labels = labels;
-                chartRef.data.datasets[0].data = counts;
-                chartRef.update();
-            }
-        }
-
-        async function fetchHistoryAndUpdateChart() {
-            try {
-                const res = await fetch("/history");
-                const hist = await res.json();
-                // hist.samples: [{timestamp: "...", count: X, seats: [...]}, ...]
-                // 新しい順で返すなら逆順に揃える等、サーバー実装と合わせる
-                const samples = hist.samples || [];
-
-                const labels = samples.map(s => {
-                    // timestampは文字列 or 数値
-                    if (typeof s.timestamp === "number") {
-                        const d = new Date(s.timestamp * 1000);
-                        return d.toLocaleTimeString();
-                    } else {
-                        // iso文字列のとき
-                        return s.timestamp.toString().slice(11,19); // "HH:MM:SS" 抜き
-                    }
-                });
-
-                const counts = samples.map(s => s.count ?? 0);
-
-                initOrUpdateChart(labels, counts);
-            } catch (err) {
-                console.error("fetchHistoryAndUpdateChart failed:", err);
-            }
-        }
-
-        // まとめて呼ぶ
-        async function refreshAll() {
-            await fetchStatusAndUpdate();
-            await fetchHistoryAndUpdateChart();
-        }
-
-        // 初回
-        refreshAll();
-        // 5秒ごと更新
-        setInterval(refreshAll, 5000);
-        </script>
-    </body>
-    </html>
+    // 初期構築＆定期更新
+    buildSeatOverlays();
+    buildCharts();
+    refreshAll();
+    setInterval(refreshAll, 5000);
+  </script>
+</body>
+</html>
     """
 
-
+# ====== 最新状態を返す ======
 @app.route("/status")
 def status():
     return jsonify(latest_data)
 
-
+# ====== 履歴を返す（古→新で最大 MAX_HISTORY 件） ======
 @app.route("/history")
 def history():
-    # 直近の履歴を返す
-    # 新しい順ではなく「古い→新しい」の時間順に返したいのでそのまま返す
-    return jsonify({
-        "samples": history_log[-MAX_HISTORY:]
-    })
+    return jsonify({"samples": history_log[-MAX_HISTORY:]})
 
-
+# ====== 管理PCからの push ======
 @app.route("/push", methods=["POST"])
 def push():
     global latest_data, history_log
-
     data = request.get_json()
     if not data:
-        return jsonify({"error": "no data"}), 400
+        return jsonify({"error":"no data"}), 400
 
-    # 最新状態を更新
-    latest_data = {
-        "timestamp": data.get("timestamp", latest_data.get("timestamp")),
-        "seats": data.get("seats", latest_data.get("seats", [])),
-        "count": data.get("count", latest_data.get("count", 0))
-    }
+    # 座席配列は8chに揃える（不足は0で埋め、超過は切り捨て）
+    seats = (data.get("seats") or [])
+    if len(seats) < NUM_SEATS:
+        seats = seats + [0]*(NUM_SEATS - len(seats))
+    seats = seats[:NUM_SEATS]
 
-    # 履歴に積む
-    history_log.append({
-        "timestamp": latest_data["timestamp"],
-        "seats": latest_data["seats"],
-        "count": latest_data["count"]
-    })
+    count = int(data.get("count", sum(1 for v in seats if v==1)))
+    ts    = data.get("timestamp", time.time())
 
-    # 上限超えたら古いのから削る
+    latest_data = {"timestamp": ts, "seats": seats, "count": count}
+
+    # 履歴追加（上限を超えたら古い方を削る）
+    history_log.append({"timestamp": ts, "seats": seats, "count": count})
     if len(history_log) > MAX_HISTORY:
         history_log = history_log[-MAX_HISTORY:]
 
     return jsonify({"ok": True})
-
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
