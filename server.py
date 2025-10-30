@@ -1,17 +1,15 @@
-# server.py — SVGオーバーレイ + 8chミニグラフ + 5秒自動更新
-# - SEATS_NORM をサーバ側で json.dumps 埋め込み（f-string衝突回避）
-# - EDIT_MODE_FLAG=False（本番）。再編集したければ True に。
+# server.py — ラベル+15pt / 薄型ミニグラフ / 合計人数グラフ追加版
 from flask import Flask, jsonify, request, send_from_directory
 import time, os, json
 
 app = Flask(__name__, static_folder="static")
 
 # ===== 設定 =====
-NUM_SEATS    = 8              # 席数
-MAX_HISTORY  = 360            # 履歴保存数（5秒周期で約30分）
-EDIT_MODE_FLAG = False        # ←編集モード（位置/サイズをドラッグで編集する時は True）
+NUM_SEATS    = 8
+MAX_HISTORY  = 360           # 5秒ごと約30分
+EDIT_MODE_FLAG = False       # 位置微調整が必要なら True に
 
-# ===== 最終座標（ユーザー提供値） =====
+# ===== 最終座標（あなたの提供値） =====
 SEATS_NORM_DATA = [
     {"x": 0.0623, "y": 0.1666, "w": 0.0858, "h": 0.1678},
     {"x": 0.0623, "y": 0.4133, "w": 0.0868, "h": 0.1716},
@@ -24,23 +22,19 @@ SEATS_NORM_DATA = [
 ]
 
 # ===== ランタイム状態 =====
-latest_data = {
-    "timestamp": time.time(),
-    "seats": [0]*NUM_SEATS,
-    "count": 0
-}
-history_log = []  # [{timestamp, seats[8], count}, ...]
+latest_data = {"timestamp": time.time(), "seats": [0]*NUM_SEATS, "count": 0}
+history_log = []  # [{timestamp, seats[], count}...]
 
-# ===== 静的ファイル =====
+# ===== 静的配信 =====
 @app.route("/static/<path:filename>")
 def static_files(filename):
     return send_from_directory(app.static_folder, filename)
 
-# ===== メインダッシュボード =====
+# ===== UI =====
 @app.route("/")
 def index():
-    seats_norm_json = json.dumps(SEATS_NORM_DATA)   # ← ここがミソ（安全にJSへ）
-    edit_mode_js    = str(EDIT_MODE_FLAG).lower()   # True/False → true/false
+    seats_norm_json = json.dumps(SEATS_NORM_DATA)
+    edit_mode_js    = str(EDIT_MODE_FLAG).lower()
     return f"""
 <!DOCTYPE html>
 <html>
@@ -49,6 +43,9 @@ def index():
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Bus Monitor</title>
 <style>
+  :root {{
+    --card-pad: 10px;
+  }}
   body {{
     font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     color:#222; background:#f5f5f5; margin:0; padding:12px 10px 60px;
@@ -57,39 +54,47 @@ def index():
   .sub {{ color:#666; font-size:.9rem; margin-bottom:12px; }}
 
   .bus-wrap {{
-    width:100%; max-width:980px; margin:0 auto 14px auto;
+    width:100%; max-width:980px; margin:0 auto 10px auto;
     background:#f5f5f5; border-radius:12px; box-shadow:0 10px 24px rgba(0,0,0,.08);
   }}
   .seat-rect.free {{ fill:#bdbdbd; stroke:#202020; stroke-width:2; }}
   .seat-rect.occ  {{ fill:#8bdc6a; stroke:#202020; stroke-width:2; }}
-  .seat-label {{ font:700 16px system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; fill:#111; }}
-
-  .handle {{ fill:#fff; stroke:#111; stroke-width:2; }}
-  .handle.tl, .handle.br {{ cursor:nwse-resize; }}
-  .handle.tr, .handle.bl {{ cursor:nesw-resize; }}
+  /* ★ ラベル +15pt（16→31px） */
+  .seat-label {{
+    font: 700 31px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    fill:#111;
+    paint-order: stroke; stroke: #fff; stroke-width: 2px; /* 視認性UP */
+  }}
 
   .cards {{
-    display:flex; gap:12px; flex-wrap:wrap; margin:12px auto 18px; max-width:980px;
+    display:flex; gap:10px; flex-wrap:wrap; margin:8px auto 12px; max-width:980px;
   }}
   .card {{
-    background:#fff; padding:12px 14px; border-radius:12px;
+    background:#fff; padding:var(--card-pad); border-radius:12px;
     box-shadow:0 10px 24px rgba(0,0,0,.07); min-width:220px;
   }}
   .big {{ font-size:2rem; font-weight:800; }}
   .muted {{ color:#666; font-size:.9rem; }}
 
+  /* ★ グラフを薄型・横長に圧縮 */
   .charts {{
     max-width:980px; margin:0 auto; background:#fff; border-radius:16px;
-    box-shadow:0 10px 24px rgba(0,0,0,.07); padding:12px;
+    box-shadow:0 10px 24px rgba(0,0,0,.07); padding:8px 10px;
   }}
-  .chart-row {{ display:flex; align-items:center; gap:10px; margin:6px 0; }}
-  .chart-title {{ width:70px; text-align:right; font-size:.9rem; color:#444; }}
-  .chart-box {{ flex:1; }}
-  canvas {{ width:100%; height:70px; }}
+  .chart-row {{ display:flex; align-items:center; gap:8px; margin:2px 0; }}
+  .chart-title {{ width:64px; text-align:right; font-size:.85rem; color:#444; }}
+  .chart-box {{ flex:1; min-width:0; }}
+  /* ★ 1本あたり高さを約36pxへ */
+  .chart-box canvas {{ width:100%; height:36px; }}
 
-  footer {{ text-align:center; color:#888; font-size:.8rem; margin-top:14px; }}
-  #editToolbar {{ max-width:980px; margin:8px auto 0; display:flex; gap:8px; justify-content:flex-end; }}
-  #editToolbar[hidden] {{ display:none; }}
+  /* ★ 合計人数グラフ（少し大きめ） */
+  .total-chart-wrap {{
+    max-width:980px; margin:0 auto 10px; background:#fff; border-radius:16px;
+    box-shadow:0 10px 24px rgba(0,0,0,.07); padding:10px;
+  }}
+  #totalChart {{ width:100%; height:60px; }}
+
+  footer {{ text-align:center; color:#888; font-size:.8rem; margin-top:12px; }}
 </style>
 </head>
 <body>
@@ -100,11 +105,10 @@ def index():
     <svg id="bus-svg" width="100%" height="auto" preserveAspectRatio="xMidYMid meet"></svg>
   </div>
 
-  <div id="editToolbar" hidden>
-    <button id="dumpBtn" style="padding:.5rem .8rem;border-radius:8px;border:1px solid #ccc;background:#fff;cursor:pointer;">
-      現在座標をコンソールに出力
-    </button>
-    <span id="editHint" style="color:#666;font-size:.9rem;"></span>
+  <!-- 合計人数グラフ -->
+  <div class="total-chart-wrap">
+    <div class="muted" style="margin-bottom:6px;">合計人数の推移</div>
+    <canvas id="totalChart"></canvas>
   </div>
 
   <div class="cards">
@@ -124,7 +128,7 @@ def index():
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script>
-    // ===== Python側から安全に注入 =====
+    // ===== Pythonから安全に注入 =====
     const NUM_SEATS  = {NUM_SEATS};
     const SEATS_NORM = {seats_norm_json};
     const EDIT_MODE  = {edit_mode_js};
@@ -177,46 +181,33 @@ def index():
         g.appendChild(r); g.appendChild(t); seatLayer.appendChild(g);
         if (EDIT_MODE) attachSeatEditors(svg, g, r, t, i);
       }}
-
-      const toolbar = document.getElementById('editToolbar');
-      const hint = document.getElementById('editHint');
-      if (EDIT_MODE) {{
-        toolbar.hidden = false;
-        if (hint) hint.textContent = '編集モード: 四角ドラッグ=移動 / 四隅丸ドラッグ=サイズ / 右のボタンで全席座標を出力';
-      }} else {{
-        toolbar.hidden = true;
-        if (hint) hint.textContent = '';
-      }}
     }}
 
-    // === 編集（位置+サイズ） ===
+    // ===（任意）編集ツール：位置＆サイズ（前バージョン通り）===
     function attachSeatEditors(svg, group, rect, text, idx) {{
       let dragging=false, resizing=false, which=null;
       let start={{x:0,y:0}}, orig={{x:0,y:0,w:0,h:0}};
-
       const handles = makeHandles(rect);
       for (const c of Object.values(handles)) group.appendChild(c);
 
       group.addEventListener('mousedown', (e) => {{
         if (!EDIT_MODE) return;
-        const target = e.target;
-        if (target.classList.contains('handle')) {{ resizing = true; which = target.dataset.which; }}
-        else {{ dragging = true; }}
+        const t=e.target;
+        if (t.classList.contains('handle')) {{ resizing=true; which=t.dataset.which; }}
+        else {{ dragging=true; }}
         start = svgPoint(svg, e);
-        orig.x = +rect.getAttribute('x'); orig.y = +rect.getAttribute('y');
-        orig.w = +rect.getAttribute('width'); orig.h = +rect.getAttribute('height');
+        orig.x=+rect.getAttribute('x'); orig.y=+rect.getAttribute('y');
+        orig.w=+rect.getAttribute('width'); orig.h=+rect.getAttribute('height');
         e.preventDefault();
       }});
       window.addEventListener('mousemove', (e) => {{
         if (!EDIT_MODE) return;
         if (!dragging && !resizing) return;
-        const p = svgPoint(svg, e);
-        const dx = p.x - start.x, dy = p.y - start.y;
+        const p=svgPoint(svg,e); const dx=p.x-start.x, dy=p.y-start.y;
         let nx=orig.x, ny=orig.y, nw=orig.w, nh=orig.h;
-
-        if (dragging) {{ nx = orig.x + dx; ny = orig.y + dy; }}
+        if (dragging) {{ nx=orig.x+dx; ny=orig.y+dy; }}
         else if (resizing) {{
-          switch (which) {{
+          switch(which) {{
             case 'tl': nx=orig.x+dx; ny=orig.y+dy; nw=orig.w-dx; nh=orig.h-dy; break;
             case 'tr': ny=orig.y+dy; nw=orig.w+dx; nh=orig.h-dy; break;
             case 'bl': nx=orig.x+dx; nw=orig.w-dx; nh=orig.h+dy; break;
@@ -225,9 +216,8 @@ def index():
         }}
         const MIN=8;
         nx=Math.max(0,nx); ny=Math.max(0,ny);
-        nw=Math.max(MIN, Math.min(nw, IMG_W-nx));
-        nh=Math.max(MIN, Math.min(nh, IMG_H-ny));
-
+        nw=Math.max(MIN,Math.min(nw,IMG_W-nx));
+        nh=Math.max(MIN,Math.min(nh,IMG_H-ny));
         rect.setAttribute('x',nx); rect.setAttribute('y',ny);
         rect.setAttribute('width',nw); rect.setAttribute('height',nh);
         text.setAttribute('x', nx+nw/2); text.setAttribute('y', ny+nh/2+6);
@@ -239,18 +229,16 @@ def index():
         dragging=false; resizing=false; which=null;
         const x=+rect.getAttribute('x'), y=+rect.getAttribute('y');
         const w=+rect.getAttribute('width'), h=+rect.getAttribute('height');
-        const norm = {{ x:+(x/IMG_W).toFixed(4), y:+(y/IMG_H).toFixed(4), w:+(w/IMG_W).toFixed(4), h:+(h/IMG_H).toFixed(4) }};
+        const norm={{x:+(x/IMG_W).toFixed(4), y:+(y/IMG_H).toFixed(4), w:+(w/IMG_W).toFixed(4), h:+(h/IMG_H).toFixed(4)}};
         console.log(`S${{idx+1}}:`, JSON.stringify(norm));
       }});
     }}
     function makeHandles(rect) {{
       const defs=[{{which:'tl',cls:'handle tl'}},{{which:'tr',cls:'handle tr'}},{{which:'bl',cls:'handle bl'}},{{which:'br',cls:'handle br'}}];
-      const hs={{}};
-      for (const d of defs) {{
+      const hs={{}}; for (const d of defs) {{
         const c=document.createElementNS('http://www.w3.org/2000/svg','circle');
         c.setAttribute('r',8); c.setAttribute('class',d.cls); c.dataset.which=d.which; hs[d.which]=c;
-      }}
-      updateHandlesPosition(rect, hs); return hs;
+      }} updateHandlesPosition(rect, hs); return hs;
     }}
     function updateHandlesPosition(rect, hs) {{
       const x=+rect.getAttribute('x'), y=+rect.getAttribute('y');
@@ -265,40 +253,67 @@ def index():
       return pt.matrixTransform(svg.getScreenCTM().inverse());
     }}
 
-    // ===== ミニグラフ =====
-    let charts=[];
-    function buildCharts() {{
+    // ===== グラフ =====
+    let charts=[], totalChart=null;
+
+    function buildTotalChart() {{
+      const ctx = document.getElementById('totalChart').getContext('2d');
+      totalChart = new Chart(ctx, {{
+        type: "line",
+        data: {{ labels: [], datasets: [{{ label: "Total", data: [], borderWidth: 2, fill: false, tension: 0.2 }}] }},
+        options: {{
+          responsive: true, maintainAspectRatio: false, animation: false,
+          plugins: {{ legend: {{ display:false }} }},
+          scales: {{
+            y: {{ beginAtZero: true, suggestedMax: {NUM_SEATS}, ticks: {{ stepSize: 1 }} }},
+            x: {{ ticks: {{ maxRotation: 0, autoSkip: true, maxTicksLimit: 8 }} }}
+          }},
+          elements: {{ point: {{ radius: 0 }} }}
+        }}
+      }});
+    }}
+
+    function buildSeatCharts() {{
       const wrap=document.getElementById("charts"); wrap.innerHTML=""; charts=[];
       for (let i=0;i<NUM_SEATS;i++) {{
         const row=document.createElement("div"); row.className="chart-row";
         const title=document.createElement("div"); title.className="chart-title"; title.textContent="Seat "+(i+1);
-        const box=document.createElement("div"); box.className="chart-box"; const c=document.createElement("canvas"); c.id="cv_"+i; box.appendChild(c);
+        const box=document.createElement("div"); box.className="chart-box";
+        const c=document.createElement("canvas"); c.id="cv_"+i; box.appendChild(c);
         row.appendChild(title); row.appendChild(box); wrap.appendChild(row);
+
         const ctx=c.getContext("2d");
         const chart=new Chart(ctx, {{
           type:"line",
           data:{{ labels:[], datasets:[{{ label:"S"+(i+1), data:[], borderWidth:2, fill:false, tension:0.2 }}] }},
           options:{{
-            responsive:true, animation:false, plugins:{{legend:{{display:false}}}},
-            scales:{{ y:{{beginAtZero:true, suggestedMax:1, ticks:{{stepSize:1}}}}, x:{{ticks:{{maxRotation:0, autoSkip:true, maxTicksLimit:6}}}} }}
+            responsive:true, maintainAspectRatio:false, animation:false,
+            plugins:{{legend:{{display:false}}}},
+            scales:{{
+              y:{{ beginAtZero:true, suggestedMax:1, ticks:{{ stepSize:1, display:false }} }},
+              x:{{ ticks:{{ maxRotation:0, autoSkip:true, maxTicksLimit:6, font:{{ size:10 }} }} }}
+            }},
+            layout:{{ padding:0 }},
+            elements:{{ point:{{ radius:0 }} }}
           }}
         }});
         charts.push(chart);
       }}
     }}
 
-    // ===== 状態更新 =====
     async function updateStatus() {{
       const res=await fetch("/status"); const data=await res.json();
       const tsRaw=data.timestamp; let tsReadable=tsRaw;
       if (typeof tsRaw==="number") tsReadable=new Date(tsRaw*1000).toLocaleString();
-      const tsEl=document.getElementById("ts"); if (tsEl) tsEl.textContent=tsReadable ?? '---';
-      const countEl=document.getElementById("count"); if (countEl) countEl.textContent=data.count ?? 0;
-      const seatsEl=document.getElementById("seats"); if (seatsEl) seatsEl.textContent=JSON.stringify((data.seats||[]).slice(0,NUM_SEATS));
+      document.getElementById("ts").textContent = tsReadable ?? '---';
+      document.getElementById("count").textContent = data.count ?? 0;
+      document.getElementById("seats").textContent = JSON.stringify((data.seats||[]).slice(0,NUM_SEATS));
+
       const seats=(data.seats||[]).slice(0,NUM_SEATS);
       for (let i=0;i<NUM_SEATS;i++) {{
         const occ=seats[i]===1;
-        const r=document.getElementById(`seat-rect-${{i}}`); const t=document.getElementById(`seat-label-${{i}}`);
+        const r=document.getElementById(`seat-rect-${{i}}`);
+        const t=document.getElementById(`seat-label-${{i}}`);
         if (!r||!t) continue;
         r.setAttribute('class', `seat-rect ${{occ ? 'occ':'free'}}`);
         t.textContent = occ ? '着座中' : '空';
@@ -309,6 +324,16 @@ def index():
       const r=await fetch("/history"); const hist=await r.json();
       const samples=hist.samples||[];
       const labels=samples.map(s=> typeof s.timestamp==="number" ? new Date(s.timestamp*1000).toLocaleTimeString() : String(s.timestamp).slice(11,19));
+
+      // 合計人数
+      const totals = samples.map(s => Number.isInteger(s.count) ? s.count : (s.seats||[]).reduce((a,v)=>a+(v===1?1:0),0));
+      if (totalChart) {{
+        totalChart.data.labels = labels;
+        totalChart.data.datasets[0].data = totals;
+        totalChart.update();
+      }}
+
+      // 各席
       const series=Array.from({{length:NUM_SEATS}}, ()=>[]);
       for (const s of samples) {{
         for (let i=0;i<NUM_SEATS;i++) series[i].push((s.seats && s.seats[i]===1)?1:0);
@@ -319,22 +344,14 @@ def index():
       }}
     }}
 
-    function dumpAllSeatNorms() {{
-      const out=[];
-      for (let i=0;i<NUM_SEATS;i++) {{
-        const r=document.getElementById(`seat-rect-${{i}}`); if (!r) continue;
-        const x=+r.getAttribute('x'), y=+r.getAttribute('y'), w=+r.getAttribute('width'), h=+r.getAttribute('height');
-        out.push({{ x:+(x/IMG_W).toFixed(4), y:+(y/IMG_H).toFixed(4), w:+(w/IMG_W).toFixed(4), h:+(h/IMG_H).toFixed(4) }});
-      }}
-      console.log("=== SEATS_NORM paste this ==="); console.log(JSON.stringify(out, null, 2));
+    async function refreshAll() {{
+      try {{ await updateStatus(); await updateCharts(); }} catch(e) {{ console.error(e); }}
     }}
-    document.getElementById('dumpBtn')?.addEventListener('click', dumpAllSeatNorms);
-
-    async function refreshAll() {{ try {{ await updateStatus(); await updateCharts(); }} catch(e) {{ console.error(e); }} }}
 
     (async () => {{
       await initBusSvg();
-      buildCharts();
+      buildTotalChart();
+      buildSeatCharts();
       await refreshAll();
       setInterval(refreshAll, 5000);
     }})();
@@ -343,17 +360,15 @@ def index():
 </html>
     """
 
-# ===== API: 最新状態 =====
+# ===== API =====
 @app.route("/status")
 def status():
     return jsonify(latest_data)
 
-# ===== API: 履歴（古→新で最大MAX_HISTORY件） =====
 @app.route("/history")
 def history():
     return jsonify({"samples": history_log[-MAX_HISTORY:]})
 
-# ===== API: 管理PC → サーバー（座席データ受信） =====
 @app.route("/push", methods=["POST"])
 def push():
     global latest_data, history_log
