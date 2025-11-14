@@ -1,4 +1,4 @@
-# server.py — 1↔3 表示入替 & 席番号60pt版
+# server.py — 1↔3 表示入替 & 席番号60pt版 + 編集モード対応
 from flask import Flask, jsonify, request, send_from_directory
 import time, os, json
 
@@ -64,7 +64,7 @@ def index():
     fill:#111;
     paint-order: stroke; stroke: #fff; stroke-width: 4px;
   }}
-  /* 左上の席番号 — ★60ptに変更 */
+  /* 左上の席番号 — 60pt */
   .seat-num {{
     font: 700 60px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     fill:#111;
@@ -139,9 +139,10 @@ def index():
     const LABEL_OFFSET = 0.08;               // 中央ラベルを下げる割合（座席高さの8%）
 
     // ★ 1と3を入れ替え（見た目ラベルを ③,②,① に）
-    const SEAT_NUM_LABELS = ['①','②','③','④','⑤','⑥','⑦','⑧'];
+    const SEAT_NUM_LABELS = ['③','②','①','④','⑤','⑥','⑦','⑧'];
 
     let IMG_W = 0, IMG_H = 0;
+    let seatRects = [], seatNums = [], seatLabels = [];
 
     function loadImage(src) {{
       return new Promise((resolve, reject) => {{
@@ -152,6 +153,26 @@ def index():
       }});
     }}
     function normToAbs(n) {{ return {{ x:n.x*IMG_W, y:n.y*IMG_H, w:n.w*IMG_W, h:n.h*IMG_H }}; }}
+
+    function applySeatLayout(idx) {{
+      const n = SEATS_NORM[idx];
+      const a = normToAbs(n);
+      const r = seatRects[idx];
+      const num = seatNums[idx];
+      const t = seatLabels[idx];
+      if (!r || !num || !t) return;
+
+      r.setAttribute('x', a.x);
+      r.setAttribute('y', a.y);
+      r.setAttribute('width', a.w);
+      r.setAttribute('height', a.h);
+
+      num.setAttribute('x', a.x + Math.max(8, a.w * 0.03));
+      num.setAttribute('y', a.y + a.h * 0.12);
+
+      t.setAttribute('x', a.x + a.w / 2);
+      t.setAttribute('y', a.y + a.h * (0.5 + LABEL_OFFSET));
+    }}
 
     async function initBusSvg() {{
       const svg = document.getElementById('bus-svg');
@@ -168,38 +189,94 @@ def index():
       const seatLayer = document.createElementNS('http://www.w3.org/2000/svg', 'g');
       seatLayer.setAttribute('id','seat-layer'); svg.appendChild(seatLayer);
 
+      seatRects = new Array(NUM_SEATS);
+      seatNums = new Array(NUM_SEATS);
+      seatLabels = new Array(NUM_SEATS);
+
       for (let i=0;i<NUM_SEATS;i++) {{
         const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
         g.setAttribute('data-index', String(i));
 
-        const a = normToAbs(SEATS_NORM[i]);
         const r = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        r.setAttribute('x',a.x); r.setAttribute('y',a.y);
         r.setAttribute('rx',10); r.setAttribute('ry',10);
-        r.setAttribute('width',a.w); r.setAttribute('height',a.h);
         r.setAttribute('class','seat-rect free');
         r.setAttribute('id',`seat-rect-${{i}}`);
 
-        // 席番号（左上寄り・少し下）— 60ptに合わせてstroke少し太め
         const num = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        num.setAttribute('x', a.x + Math.max(8, a.w * 0.03));
-        num.setAttribute('y', a.y + a.h * 0.12);
         num.setAttribute('dominant-baseline', 'hanging');
         num.setAttribute('class','seat-num');
         num.textContent = SEAT_NUM_LABELS[i];
 
-        // 中央の状態テキスト（空 / 着座中）— 中央から下方向へh*LABEL_OFFSETだけ下げる
         const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        t.setAttribute('x', a.x + a.w/2);
-        t.setAttribute('y', a.y + a.h * (0.5 + LABEL_OFFSET));
         t.setAttribute('text-anchor','middle');
         t.setAttribute('dominant-baseline','middle');
         t.setAttribute('class','seat-label');
         t.setAttribute('id',`seat-label-${{i}}`);
         t.textContent = '空';
 
+        seatRects[i] = r;
+        seatNums[i] = num;
+        seatLabels[i] = t;
+
+        applySeatLayout(i);
+
         g.appendChild(r); g.appendChild(num); g.appendChild(t); seatLayer.appendChild(g);
       }}
+    }}
+
+    function enableEditMode() {{
+      const svg = document.getElementById('bus-svg');
+      if (!svg) return;
+      svg.style.touchAction = 'none';
+
+      let dragInfo = null;
+
+      seatRects.forEach((rect, idx) => {{
+        if (!rect) return;
+        rect.style.cursor = 'move';
+
+        rect.addEventListener('pointerdown', e => {{
+          dragInfo = {{
+            idx,
+            pointerId: e.pointerId,
+            startX: e.clientX,
+            startY: e.clientY,
+            startNorm: {{ ...SEATS_NORM[idx] }}
+          }};
+          rect.setPointerCapture(e.pointerId);
+        }});
+
+        rect.addEventListener('pointermove', e => {{
+          if (!dragInfo || dragInfo.idx !== idx) return;
+          const dx = e.clientX - dragInfo.startX;
+          const dy = e.clientY - dragInfo.startY;
+          const dxNorm = dx / IMG_W;
+          const dyNorm = dy / IMG_H;
+          const n = SEATS_NORM[idx];
+          n.x = dragInfo.startNorm.x + dxNorm;
+          n.y = dragInfo.startNorm.y + dyNorm;
+          applySeatLayout(idx);
+        }});
+
+        rect.addEventListener('pointerup', e => {{
+          if (!dragInfo || dragInfo.idx !== idx) return;
+          try {{
+            rect.releasePointerCapture(dragInfo.pointerId);
+          }} catch (err) {{}}
+          dragInfo = null;
+          console.log('UPDATED SEATS_NORM:', JSON.stringify(SEATS_NORM, null, 2));
+        }});
+
+        rect.addEventListener('pointercancel', e => {{
+          if (!dragInfo || dragInfo.idx !== idx) return;
+          try {{
+            rect.releasePointerCapture(dragInfo.pointerId);
+          }} catch (err) {{}}
+          dragInfo = null;
+        }});
+      }});
+
+      alert('編集モード: 座席をドラッグして位置調整できます。\\n調整後、ブラウザのコンソールに出た SEATS_NORM を server.py にコピーしてください。');
     }}
 
     // ===== グラフ =====
@@ -301,6 +378,9 @@ def index():
 
     (async () => {{
       await initBusSvg();
+      if (EDIT_MODE) {{
+        enableEditMode();
+      }}
       buildTotalChart();
       buildSeatCharts();
       await refreshAll();
@@ -344,8 +424,3 @@ def push():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
-
-
-
-
-
