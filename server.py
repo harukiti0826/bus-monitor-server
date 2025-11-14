@@ -43,6 +43,8 @@ def index():
 <title>Bus Monitor</title>
 <style>
   :root {{ --card-pad: 10px; }}
+  * {{ box-sizing: border-box; }}
+  
   body {{
     font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     color:#222; background:#f5f5f5; margin:0; padding:12px 10px 60px;
@@ -53,7 +55,13 @@ def index():
   .bus-wrap {{
     width:100%; max-width:980px; margin:0 auto 14px;
     background:#f5f5f5; border-radius:12px; box-shadow:0 10px 24px rgba(0,0,0,.08);
+    overflow: hidden;
   }}
+  
+  #bus-svg {{
+    transition: transform 0.2s ease;
+  }}
+  
   .seat-rect.free {{ fill:#bdbdbd; stroke:#202020; stroke-width:2; }}
   .seat-rect.occ  {{ fill:#8bdc6a; stroke:#202020; stroke-width:2; }}
 
@@ -75,7 +83,7 @@ def index():
   }}
   .card {{
     background:#fff; padding:var(--card-pad); border-radius:12px;
-    box-shadow:0 10px 24px rgba(0,0,0,.07); min-width:220px;
+    box-shadow:0 10px 24px rgba(0,0,0,.07); min-width:220px; flex: 1;
   }}
   .big {{ font-size:2rem; font-weight:800; }}
   .muted {{ color:#666; font-size:.9rem; }}
@@ -86,7 +94,7 @@ def index():
     border-radius: 16px; box-shadow: 0 10px 24px rgba(0,0,0,.07);
     padding: 12px; height: 150px; position: relative;
   }}
-  #totalChart {{ position:absolute; left:0; top:0; width:100%; height:100%; display:block; }}
+  #totalChart {{ position:absolute; left:12px; top:36px; width:calc(100% - 24px); height:calc(100% - 48px); display:block; }}
 
   /* ミニグラフ（余白あり） */
   .charts {{
@@ -98,20 +106,193 @@ def index():
   .chart-box {{ flex:1; min-width:0; }}
   .chart-box canvas {{ width:100%; height:54px; }}
 
+  .zoom-controls {{
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 1000;
+    display: none;
+    gap: 8px;
+  }}
+  
+  .zoom-btn {{
+    padding: 8px 12px;
+    border: none;
+    border-radius: 8px;
+    background: #fff;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    font-size: 1.2rem;
+    transition: all 0.2s;
+  }}
+  
+  .zoom-btn:hover {{
+    background: #f0f0f0;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  }}
+  
+  .zoom-btn:active {{
+    transform: scale(0.95);
+  }}
+
   footer {{ text-align:center; color:#888; font-size:.8rem; margin-top:12px; }}
+  
+  .main-content {{
+    max-width: 980px;
+    margin: 0 auto;
+  }}
+  
+  /* PCサイズ（1024px以上）での最適化 */
+  @media (min-width: 1024px) {{
+    body {{
+      padding: 24px 20px 60px;
+      max-width: 1400px;
+      margin: 0 auto;
+    }}
+    
+    h1 {{ font-size: 2rem; }}
+    
+    /* バス画像とグラフを横並びに */
+    .main-content {{
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      margin-bottom: 20px;
+      max-width: none;
+    }}
+    
+    .bus-wrap {{
+      margin: 0;
+      max-width: none;
+    }}
+    
+    .total-chart-wrap {{
+      margin: 0;
+      height: 300px;
+      max-width: none;
+    }}
+    
+    #totalChart {{
+      height: calc(100% - 48px);
+    }}
+    
+    /* カードを横並びに */
+    .cards {{
+      flex-wrap: nowrap;
+      max-width: none;
+    }}
+    
+    .card {{
+      flex: 1;
+      min-width: 0;
+    }}
+    
+    /* 座席グラフを2列表示 */
+    .charts {{
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      max-width: none;
+    }}
+    
+    .chart-row {{
+      flex-direction: column;
+      align-items: stretch;
+      margin: 0;
+    }}
+    
+    .chart-title {{
+      width: 100%;
+      text-align: left;
+      font-size: 1rem;
+      margin-bottom: 8px;
+      font-weight: 600;
+    }}
+    
+    .chart-box canvas {{
+      height: 80px;
+    }}
+    
+    .zoom-controls {{
+      display: flex;
+    }}
+  }}
+  
+  /* 超大画面（1600px以上）での最適化 */
+  @media (min-width: 1600px) {{
+    body {{
+      max-width: 1800px;
+    }}
+    
+    .charts {{
+      grid-template-columns: 1fr 1fr 1fr 1fr;
+    }}
+  }}
+  
+  /* ダークモード対応 */
+  @media (prefers-color-scheme: dark) {{
+    body {{
+      background: #1a1a1a;
+      color: #e0e0e0;
+    }}
+    
+    .card, .total-chart-wrap, .charts {{
+      background: #2a2a2a;
+      box-shadow: 0 10px 24px rgba(0,0,0,0.3);
+    }}
+    
+    .muted {{
+      color: #999;
+    }}
+    
+    .bus-wrap {{
+      background: #2a2a2a;
+    }}
+    
+    .seat-rect.free {{
+      fill: #4a4a4a;
+      stroke: #e0e0e0;
+    }}
+    
+    .seat-label, .seat-num {{
+      fill: #e0e0e0;
+      stroke: #2a2a2a;
+    }}
+    
+    .zoom-btn {{
+      background: #2a2a2a;
+      color: #e0e0e0;
+    }}
+    
+    .zoom-btn:hover {{
+      background: #3a3a3a;
+    }}
+    
+    footer {{
+      color: #666;
+    }}
+  }}
 </style>
 </head>
 <body>
-  <h1>🚌 Bus Monitor</h1>
-  <div class="sub">last update: <span id="ts">---</span> / 5秒ごとに自動更新</div>
-
-  <div class="bus-wrap">
-    <svg id="bus-svg" width="100%" height="auto" preserveAspectRatio="xMidYMid meet"></svg>
+  <div class="zoom-controls" id="zoomControls">
+    <button class="zoom-btn" id="zoomIn" title="拡大 (+)">➕</button>
+    <button class="zoom-btn" id="zoomOut" title="縮小 (-)">➖</button>
+    <button class="zoom-btn" id="zoomReset" title="リセット (0)">↺</button>
   </div>
 
-  <div class="total-chart-wrap">
-    <div class="muted" style="margin-bottom:6px;">合計人数の推移</div>
-    <canvas id="totalChart"></canvas>
+  <h1>🚌 Bus Monitor</h1>
+  <div class="sub">last update: <span id="ts">---</span> / 5秒ごとに自動更新 <span style="color:#999; margin-left:10px;">(キーボード: R=更新, +/-=ズーム)</span></div>
+
+  <div class="main-content">
+    <div class="bus-wrap">
+      <svg id="bus-svg" width="100%" height="auto" preserveAspectRatio="xMidYMid meet"></svg>
+    </div>
+
+    <div class="total-chart-wrap">
+      <div class="muted" style="margin-bottom:6px;">合計人数の推移</div>
+      <canvas id="totalChart"></canvas>
+    </div>
   </div>
 
   <div class="cards">
@@ -121,7 +302,11 @@ def index():
     </div>
     <div class="card">
       <div class="muted">席配列</div>
-      <div style="font-family:monospace" id="seats">[{", ".join("0" for _ in range(NUM_SEATS))}]</div>
+      <div style="font-family:monospace; font-size:0.9rem;" id="seats">[{", ".join("0" for _ in range(NUM_SEATS))}]</div>
+    </div>
+    <div class="card">
+      <div class="muted">更新間隔</div>
+      <div style="font-size:1.5rem; font-weight:600;">5秒</div>
     </div>
   </div>
 
@@ -142,6 +327,7 @@ def index():
 
     let IMG_W = 0, IMG_H = 0;
     let seatRects = [], seatNums = [], seatLabels = [];
+    let zoomLevel = 1;
 
     function loadImage(src) {{
       return new Promise((resolve, reject) => {{
@@ -282,6 +468,50 @@ def index():
       alert('編集モード: 座席をドラッグして位置調整できます。\\n調整後、ブラウザのコンソールに出た SEATS_NORM を server.py にコピーしてください。');
     }}
 
+    // ===== ズーム機能 =====
+    function applyZoom() {{
+      const svg = document.getElementById('bus-svg');
+      svg.style.transform = `scale(${{zoomLevel}})`;
+      svg.style.transformOrigin = 'center top';
+    }}
+
+    function setupZoomControls() {{
+      document.getElementById('zoomIn').onclick = () => {{
+        zoomLevel = Math.min(zoomLevel + 0.2, 2.5);
+        applyZoom();
+      }};
+      
+      document.getElementById('zoomOut').onclick = () => {{
+        zoomLevel = Math.max(zoomLevel - 0.2, 0.5);
+        applyZoom();
+      }};
+      
+      document.getElementById('zoomReset').onclick = () => {{
+        zoomLevel = 1;
+        applyZoom();
+      }};
+    }}
+
+    // キーボードショートカット
+    document.addEventListener('keydown', (e) => {{
+      if (e.key === 'r' || e.key === 'R') {{
+        refreshAll();
+        console.log('手動更新しました');
+      }}
+      if (e.key === '=' || e.key === '+') {{
+        zoomLevel = Math.min(zoomLevel + 0.1, 2.5);
+        applyZoom();
+      }}
+      if (e.key === '-' || e.key === '_') {{
+        zoomLevel = Math.max(zoomLevel - 0.1, 0.5);
+        applyZoom();
+      }}
+      if (e.key === '0') {{
+        zoomLevel = 1;
+        applyZoom();
+      }}
+    }});
+
     // ===== グラフ =====
     let charts=[], totalChart=null;
 
@@ -290,7 +520,7 @@ def index():
       if (totalChart) totalChart.destroy();
       totalChart = new Chart(ctx, {{
         type: "line",
-        data: {{ labels: [], datasets: [{{ label: "Total", data: [], borderWidth: 2, fill: false, tension: 0.2 }}] }},
+        data: {{ labels: [], datasets: [{{ label: "Total", data: [], borderWidth: 2, fill: false, tension: 0.2, borderColor: '#4CAF50' }}] }},
         options: {{
           responsive: true,
           maintainAspectRatio: false,
@@ -308,9 +538,11 @@ def index():
 
     function buildSeatCharts() {{
       const wrap=document.getElementById("charts"); wrap.innerHTML=""; charts=[];
+      const colors = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#FF6384', '#C9CBCF'];
+      
       for (let i=0;i<NUM_SEATS;i++) {{
         const row=document.createElement("div"); row.className="chart-row";
-        const title=document.createElement("div"); title.className="chart-title"; title.textContent="Seat "+(i+1);
+        const title=document.createElement("div"); title.className="chart-title"; title.textContent=`Seat ${{i+1}} ${{SEAT_NUM_LABELS[i]}}`;
         const box=document.createElement("div"); box.className="chart-box";
         const c=document.createElement("canvas"); c.id="cv_"+i; box.appendChild(c);
         row.appendChild(title); row.appendChild(box); wrap.appendChild(row);
@@ -318,7 +550,7 @@ def index():
         const ctx=c.getContext("2d");
         const chart=new Chart(ctx, {{
           type:"line",
-          data:{{ labels:[], datasets:[{{ label:"S"+(i+1), data:[], borderWidth:2, fill:false, tension: 0.2 }}] }},
+          data:{{ labels:[], datasets:[{{ label:"S"+(i+1), data:[], borderWidth:2, fill:false, tension: 0.2, borderColor: colors[i % colors.length] }}] }},
           options:{{
             responsive:true, maintainAspectRatio:false, animation:false,
             plugins:{{legend:{{display:false}}}},
@@ -365,7 +597,7 @@ def index():
         totalChart.update();
       }}
 
-      const series=Array.from({ length: NUM_SEATS }, ()=>[]);
+      const series=Array.from({{ length: NUM_SEATS }}, ()=>[]);
       for (const s of samples) {{
         for (let i=0; i<NUM_SEATS; i++) {{
           series[i].push((s.seats && s.seats[i]===1) ? 1 : 0);
@@ -390,6 +622,7 @@ def index():
 
     (async () => {{
       await initBusSvg();
+      setupZoomControls();
       buildTotalChart();
       buildSeatCharts();
       await refreshAll();
