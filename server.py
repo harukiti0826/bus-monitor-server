@@ -1,4 +1,3 @@
-# server.py — 1↔3 表示入替 & 席番号60pt版 + 編集モード対応
 from flask import Flask, jsonify, request, send_from_directory
 import time, os, json
 
@@ -327,7 +326,7 @@ def index():
               y:{{ beginAtZero:true, suggestedMax:1, ticks:{{ stepSize:1, display:false }}, grid:{{ display:false }} }},
               x:{{ ticks:{{ maxRotation:0, autoSkip:true, maxTicksLimit:6, font:{{ size:10 }} }}, grid:{{ display:false }} }}
             }},
-            layout:{{ padding: {{ top: 4, right: 4, bottom: 4, left: 4 }} }},
+            layout:{{ padding:{{ top:4, right:4, bottom:4, left:4 }} }},
             elements:{{ point:{{ radius:0 }} }}
           }}
         }});
@@ -348,15 +347,15 @@ def index():
         const occ=seats[i]===1;
         const r=document.getElementById(`seat-rect-${{i}}`);
         const t=document.getElementById(`seat-label-${{i}}`);
-        if (!r||!t) continue;
-        r.setAttribute('class', `seat-rect ${{occ ? 'occ':'free'}}`);
+        if (!r || !t) continue;
+        r.setAttribute('class', `seat-rect ${{occ ? 'occ' : 'free'}}`);
         t.textContent = occ ? '着座中' : '空';
       }}
     }}
 
     async function updateCharts() {{
       const r=await fetch("/history"); const hist=await r.json();
-      const samples=hist.samples||[];
+      const samples=hist.samples || [];
       const labels=samples.map(s=> typeof s.timestamp==="number" ? new Date(s.timestamp*1000).toLocaleTimeString() : String(s.timestamp).slice(11,19));
 
       const totals = samples.map(s => Number.isInteger(s.count) ? s.count : (s.seats||[]).reduce((a,v)=>a+(v===1?1:0),0));
@@ -366,18 +365,27 @@ def index():
         totalChart.update();
       }}
 
-      const series=Array.from({{length:NUM_SEATS}}, ()=>[]);
+      const series=Array.from({ length: NUM_SEATS }, ()=>[]);
       for (const s of samples) {{
-        for (let i=0;i<NUM_SEATS;i++) series[i].push((s.seats && s.seats[i]===1)?1:0);
+        for (let i=0; i<NUM_SEATS; i++) {{
+          series[i].push((s.seats && s.seats[i]===1) ? 1 : 0);
+        }}
       }}
-      for (let i=0;i<NUM_SEATS;i++) {{
+      for (let i=0; i<NUM_SEATS; i++) {{
         const ch=charts[i]; if (!ch) continue;
-        ch.data.labels=labels; ch.data.datasets[0].data=series[i]; ch.update();
+        ch.data.labels = labels;
+        ch.data.datasets[0].data = series[i];
+        ch.update();
       }}
     }}
 
     async function refreshAll() {{
-      try {{ await updateStatus(); await updateCharts(); }} catch(e) {{ console.error(e); }}
+      try {{
+        await updateStatus();
+        await updateCharts();
+      }} catch (e) {{
+        console.error(e);
+      }}
     }}
 
     (async () => {{
@@ -385,7 +393,7 @@ def index():
       buildTotalChart();
       buildSeatCharts();
       await refreshAll();
-      setInterval(refreshAll, 5000);//描画間隔
+      setInterval(refreshAll, 5000); // 5秒ごとに更新
     }})();
   </script>
 </body>
@@ -425,6 +433,3 @@ def push():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
-
-
-
