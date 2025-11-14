@@ -7,18 +7,9 @@ app = Flask(__name__, static_folder="static")
 # ===== 基本設定 =====
 NUM_SEATS       = 8
 MAX_HISTORY     = 360            # 5秒ごと約30分
-EDIT_MODE_FLAG  = True          # 位置調整が必要なら True
+EDIT_MODE_FLAG  = False          # 位置調整が終わったら False
 
-# ===== 座席座標（正規化 0〜1）— ユーザー提供最新版 =====
-SEATS_NORM_DATA = [
-    {"x": 0.06332041629456332, "y": 0.6654928937601677, "w": 0.0858, "h": 0.1678},
-    {"x": 0.0623,              "y": 0.4133,              "w": 0.0868, "h": 0.1716},
-    {"x": 0.06230000000000006, "y": 0.16694828238332093, "w": 0.0868, "h": 0.1697},
-    {"x": 0.2961,              "y": 0.1642,              "w": 0.0879, "h": 0.1716},
-    {"x": 0.4657,              "y": 0.1661,              "w": 0.0889, "h": 0.1697},
-    {"x": 0.7004,              "y": 0.1646,              "w": 0.0879, "h": 0.1716},
-    {"x": 0.7014,              "y": 0.4133,              "w": 0.0868, "h": 0.1716},
-    {"x": 0.7004,              "y": 0.6619,              "w": 0.0879, "h": 0.1736}
+# ===== 座席座標（正規化 0〜1）— 編集後 =====
 SEATS_NORM_DATA = [
     {"x": 0.23836330219294652, "y": 0.6645828609044532, "w": 0.0858, "h": 0.1678},
     {"x": 0.23757626260431156, "y": 0.4128449835721427, "w": 0.0868, "h": 0.1716},
@@ -231,6 +222,10 @@ def index():
 
         g.appendChild(r); g.appendChild(num); g.appendChild(t); seatLayer.appendChild(g);
       }}
+
+      if (EDIT_MODE) {{
+        enableEditMode();
+      }}
     }}
 
     function enableEditMode() {{
@@ -387,9 +382,6 @@ def index():
 
     (async () => {{
       await initBusSvg();
-      if (EDIT_MODE) {{
-        enableEditMode();
-      }}
       buildTotalChart();
       buildSeatCharts();
       await refreshAll();
@@ -433,4 +425,3 @@ def push():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
-
