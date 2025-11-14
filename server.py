@@ -48,12 +48,14 @@ def index():
   body {{
     font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     color:#222; background:#f5f5f5; margin:0; padding:12px 10px 60px;
+    width: 100%;
+    overflow-x: hidden;
   }}
   h1 {{ font-size:1.4rem; display:flex; gap:.5rem; align-items:center; margin:12px 0 6px; }}
   .sub {{ color:#666; font-size:.9rem; margin-bottom:12px; }}
 
   .bus-wrap {{
-    width:100%; max-width:980px; margin:0 auto 14px;
+    width:100%; margin:0 auto 14px;
     background:#f5f5f5; border-radius:12px; box-shadow:0 10px 24px rgba(0,0,0,.08);
     overflow: hidden;
   }}
@@ -79,7 +81,7 @@ def index():
   }}
 
   .cards {{
-    display:flex; gap:10px; flex-wrap:wrap; margin:8px auto 12px; max-width:980px;
+    display:flex; gap:10px; flex-wrap:wrap; margin:8px auto 12px; width: 100%;
   }}
   .card {{
     background:#fff; padding:var(--card-pad); border-radius:12px;
@@ -90,7 +92,7 @@ def index():
 
   /* 合計人数グラフ（固定サイズ＋余白） */
   .total-chart-wrap {{
-    max-width: 980px; margin: 0 auto 16px; background: #fff;
+    width: 100%; margin: 0 auto 16px; background: #fff;
     border-radius: 16px; box-shadow: 0 10px 24px rgba(0,0,0,.07);
     padding: 12px; height: 150px; position: relative;
   }}
@@ -98,7 +100,7 @@ def index():
 
   /* ミニグラフ（余白あり） */
   .charts {{
-    max-width:980px; margin:0 auto; background:#fff; border-radius:16px;
+    width: 100%; margin:0 auto; background:#fff; border-radius:16px;
     box-shadow:0 10px 24px rgba(0,0,0,.07); padding:16px;
   }}
   .chart-row {{ display:flex; align-items:center; gap:14px; margin:8px 0; }}
@@ -138,7 +140,7 @@ def index():
   footer {{ text-align:center; color:#888; font-size:.8rem; margin-top:12px; }}
   
   .main-content {{
-    max-width: 980px;
+    width: 100%;
     margin: 0 auto;
   }}
   
@@ -146,8 +148,8 @@ def index():
   @media (min-width: 1024px) {{
     body {{
       padding: 24px 20px 60px;
-      max-width: 1400px;
-      margin: 0 auto;
+      width: 100%;
+      margin: 0;
     }}
     
     h1 {{ font-size: 2rem; }}
@@ -158,18 +160,18 @@ def index():
       grid-template-columns: 1fr 1fr;
       gap: 20px;
       margin-bottom: 20px;
-      max-width: none;
+      width: 100%;
     }}
     
     .bus-wrap {{
       margin: 0;
-      max-width: none;
+      width: 100%;
     }}
     
     .total-chart-wrap {{
       margin: 0;
       height: 300px;
-      max-width: none;
+      width: 100%;
     }}
     
     #totalChart {{
@@ -179,7 +181,7 @@ def index():
     /* カードを横並びに */
     .cards {{
       flex-wrap: nowrap;
-      max-width: none;
+      width: 100%;
     }}
     
     .card {{
@@ -192,7 +194,7 @@ def index():
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 16px;
-      max-width: none;
+      width: 100%;
     }}
     
     .chart-row {{
@@ -221,7 +223,7 @@ def index():
   /* 超大画面（1600px以上）での最適化 */
   @media (min-width: 1600px) {{
     body {{
-      max-width: 1800px;
+      padding: 24px 40px 60px;
     }}
     
     .charts {{
