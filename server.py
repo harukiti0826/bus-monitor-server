@@ -6,7 +6,7 @@ app = Flask(__name__, static_folder="static")
 
 # ===== 基本設定 =====
 NUM_SEATS       = 8
-MAX_HISTORY     = 360            # 5秒ごと約30分
+MAX_HISTORY     = 120            # 5秒ごと約10分
 EDIT_MODE_FLAG  = False          # 位置調整が終わったら False
 
 # ===== 座席座標（正規化 0〜1）— 編集後 =====
@@ -425,4 +425,5 @@ def push():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
+
 
