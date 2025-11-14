@@ -139,7 +139,7 @@ def index():
     const LABEL_OFFSET = 0.08;               // 中央ラベルを下げる割合（座席高さの8%）
 
     // ★ 1と3を入れ替え（見た目ラベルを ③,②,① に）
-    const SEAT_NUM_LABELS = ['③','②','①','④','⑤','⑥','⑦','⑧'];
+    const SEAT_NUM_LABELS = ['①','②','③','④','⑤','⑥','⑦','⑧'];
 
     let IMG_W = 0, IMG_H = 0;
     let seatRects = [], seatNums = [], seatLabels = [];
@@ -425,3 +425,4 @@ def push():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
+
