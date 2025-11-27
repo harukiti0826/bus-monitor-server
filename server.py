@@ -108,12 +108,16 @@ def index():
   .seat-rect.free {{ fill:#bdbdbd; stroke:#202020; stroke-width:2; }}
   .seat-rect.occ  {{ fill:#8bdc6a; stroke:#202020; stroke-width:2; }}
 
-  /* ★ 状態ラベルと席番号を同じフォントで */
-  .seat-label,
-  .seat-num {{
+  /* 中央の状態ラベル（「１ 空」 / 「１ 着座中」みたいなやつ） */
+  .seat-label {{
     font: 700 80px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     fill:#111;
     paint-order: stroke; stroke: #fff; stroke-width: 4px;
+  }}
+
+  /* もともとの左上席番号は使わないので非表示にしておく */
+  .seat-num {{
+    display: none;
   }}
 
   .cards {{
@@ -182,7 +186,8 @@ def index():
     const EDIT_MODE   = {edit_mode_js};
     const LABEL_OFFSET = 0.08;
 
-    const SEAT_NUM_LABELS = ['③','②','①','④','⑤','⑥','⑦','⑧'];
+    // ★ 全角数字 １〜８（席番号と状態ラベルをここから作る）
+    const SEAT_NUM_LABELS = ['１','２','３','４','５','６','７','８'];
 
     let IMG_W = 0, IMG_H = 0;
     let seatRects = [], seatNums = [], seatLabels = [];
@@ -205,23 +210,17 @@ def index():
       const t = seatLabels[idx];
       if (!r || !num || !t) return;
 
-      // 座席の中心（状態ラベルの位置）
-      const cx = a.x + a.w / 2;
-      const cy = a.y + a.h * (0.5 + LABEL_OFFSET);
-
-      // 座席枠
       r.setAttribute('x', a.x);
       r.setAttribute('y', a.y);
       r.setAttribute('width', a.w);
       r.setAttribute('height', a.h);
 
-      // 席番号：状態ラベルの左側に配置
-      num.setAttribute('x', cx - a.w * 0.08);
-      num.setAttribute('y', cy);
+      // num は非表示だが位置だけ一応更新しておく（安全のため）
+      num.setAttribute('x', a.x + Math.max(8, a.w * 0.03));
+      num.setAttribute('y', a.y + a.h * 0.12);
 
-      // 状態ラベル（空 / 着座中）：中央
-      t.setAttribute('x', cx);
-      t.setAttribute('y', cy);
+      t.setAttribute('x', a.x + a.w / 2);
+      t.setAttribute('y', a.y + a.h * (0.5 + LABEL_OFFSET));
     }}
 
     async function initBusSvg() {{
@@ -253,9 +252,8 @@ def index():
         r.setAttribute('id',`seat-rect-${{i}}`);
 
         const num = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        num.setAttribute('dominant-baseline', 'hanging');
         num.setAttribute('class','seat-num');
-        num.setAttribute('text-anchor','end');      // 右揃え
-        num.setAttribute('dominant-baseline','middle');
         num.textContent = SEAT_NUM_LABELS[i];
 
         const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
@@ -263,7 +261,8 @@ def index():
         t.setAttribute('dominant-baseline','middle');
         t.setAttribute('class','seat-label');
         t.setAttribute('id',`seat-label-${{i}}`);
-        t.textContent = '空';
+        // ★ 初期表示も「番号 + 空」
+        t.textContent = `${{SEAT_NUM_LABELS[i]}} 空`;
 
         seatRects[i] = r;
         seatNums[i] = num;
@@ -377,7 +376,7 @@ def index():
               y{{ beginAtZero:true, suggestedMax:1, ticks{{ stepSize:1, display:false }}, grid{{ display:false }} }},
               x{{ ticks{{ maxRotation:0, autoSkip:true, maxTicksLimit:6, font{{ size:10 }} }}, grid{{ display:false }} }}
             }},
-            layout{{ padding {{ top: 4, right: 4, bottom: 4, left: 4 }} }},
+            layout{{ padding{{ top: 4, right: 4, bottom: 4, left: 4 }} }},
             elements{{ point{{ radius:0 }} }}
           }}
         }});
@@ -400,7 +399,8 @@ def index():
         const t=document.getElementById(`seat-label-${{i}}`);
         if (!r||!t) continue;
         r.setAttribute('class', `seat-rect ${{occ ? 'occ':'free'}}`);
-        t.textContent = occ ? '着座中' : '空';
+        // ★ 状態更新時も「番号 + 空 / 着座中」
+        t.textContent = `${{SEAT_NUM_LABELS[i]}} ${{occ ? '着座中' : '空'}}`;
       }}
     }}
 
