@@ -132,7 +132,7 @@ def index():
 <body>
   <div class="hero">
     <h1>🚌 Bus Monitor</h1>
-    <div class="sub">last update: <span id="ts">---</span> / 5秒ごとに自動更新</div>
+    <div class="sub">last update: <span id="ts">---</span> </div>
   </div>
 
   <div class="bus-wrap">
@@ -454,3 +454,4 @@ def push():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
+
