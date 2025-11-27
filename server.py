@@ -82,7 +82,7 @@ def index():
   }}
   .hero h1 {{
     margin: 0 0 4px;
-    font-size: 1.6rem;
+    font-size: 1.2rem;
     display: flex;
     gap: .5rem;
     align-items: center;
@@ -470,3 +470,4 @@ def push():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
+
