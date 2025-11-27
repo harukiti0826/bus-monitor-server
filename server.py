@@ -42,6 +42,22 @@ def index():
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Bus Monitor</title>
+
+<!-- ▼ ここから OGP/Twitter カード用タグ ▼ -->
+<meta name="description" content="バス車内の座席の着席状況をリアルタイムで確認できるWebダッシュボードです。" />
+
+<meta property="og:title" content="🚌 バス座席状況確認" />
+<meta property="og:description" content="三豊市自動運転バス座席状況確認WEB" />
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://bus-monitor-server.onrender.com/" />
+<meta property="og:image" content="https://bus-monitor-server.onrender.com/static/header.png" />
+
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="🚌 バス座席状況確認" />
+<meta name="twitter:description" content="三豊市自動運転バス座席状況確認WEB" />
+<meta name="twitter:image" content="https://bus-monitor-server.onrender.com/static/header.png" />
+<!-- ▲ ここまで追加 ▲ -->
+
 <style>
   :root {{ --card-pad: 10px; }}
   body {{
@@ -55,7 +71,7 @@ def index():
   .hero {{
     max-width: 980px;
     margin: 0 auto 12px;
-    padding: 14px 16px 36px;
+    padding: 16px 16px 28px;
     border-radius: 16px;
     background-image: url('/static/header.png');
     background-size: cover;
@@ -80,7 +96,7 @@ def index():
   /* 画面が広いとき（PC向け）はヘッダーをさらに縦に広げる */
   @media (min-width: 900px) {{
     .hero {{
-      padding: 40px 32px 200px;  /* 上下の余白をPC向けに増量 */
+      padding: 40px 32px 200px;
     }}
   }}
 
@@ -92,13 +108,11 @@ def index():
   .seat-rect.free {{ fill:#bdbdbd; stroke:#202020; stroke-width:2; }}
   .seat-rect.occ  {{ fill:#8bdc6a; stroke:#202020; stroke-width:2; }}
 
-  /* 中央の状態ラベル（空/着座中）80pt */
   .seat-label {{
     font: 700 80px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     fill:#111;
     paint-order: stroke; stroke: #fff; stroke-width: 4px;
   }}
-  /* 左上の席番号 — 60pt */
   .seat-num {{
     font: 700 60px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     fill:#111;
@@ -115,7 +129,6 @@ def index():
   .big {{ font-size:2rem; font-weight:800; }}
   .muted {{ color:#666; font-size:.9rem; }}
 
-  /* 合計人数グラフ（固定サイズ＋余白） */
   .total-chart-wrap {{
     max-width: 980px; margin: 0 auto 16px; background: #fff;
     border-radius: 16px; box-shadow: 0 10px 24px rgba(0,0,0,.07);
@@ -123,7 +136,6 @@ def index():
   }}
   #totalChart {{ position:absolute; left:0; top:0; width:100%; height:100%; display:block; }}
 
-  /* ミニグラフ（余白あり） */
   .charts {{
     max-width:980px; margin:0 auto; background:#fff; border-radius:16px;
     box-shadow:0 10px 24px rgba(0,0,0,.07); padding:16px;
@@ -138,7 +150,7 @@ def index():
 </head>
 <body>
   <div class="hero">
-    <h1>🚌 Bus Monitor</h1>
+    <h1>🚌三豊市自動運転バス座席状況</h1>
     <div class="sub">last update: <span id="ts">---</span> </div>
   </div>
 
@@ -168,13 +180,11 @@ def index():
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script>
-    // ===== Pythonから注入 =====
     const NUM_SEATS   = {NUM_SEATS};
     const SEATS_NORM  = {seats_norm_json};
     const EDIT_MODE   = {edit_mode_js};
-    const LABEL_OFFSET = 0.08;               // 中央ラベルを下げる割合（座席高さの8%）
+    const LABEL_OFFSET = 0.08;
 
-    // ★ 1と3を入れ替え（見た目ラベルを ③,②,① に）
     const SEAT_NUM_LABELS = ['③','②','①','④','⑤','⑥','⑦','⑧'];
 
     let IMG_W = 0, IMG_H = 0;
@@ -319,7 +329,6 @@ def index():
       alert('編集モード: 座席をドラッグして位置調整できます。\\n調整後、ブラウザのコンソールに出た SEATS_NORM を server.py にコピーしてください。');
     }}
 
-    // ===== グラフ =====
     let charts=[], totalChart=null;
 
     function buildTotalChart() {{
@@ -461,7 +470,3 @@ def push():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
-
-
-
-
