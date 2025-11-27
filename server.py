@@ -108,16 +108,15 @@ def index():
   .seat-rect.free {{ fill:#bdbdbd; stroke:#202020; stroke-width:2; }}
   .seat-rect.occ  {{ fill:#8bdc6a; stroke:#202020; stroke-width:2; }}
 
-  /* 中央の状態ラベル（「１ 空」 / 「１ 着座中」みたいなやつ） */
   .seat-label {{
     font: 700 80px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     fill:#111;
     paint-order: stroke; stroke: #fff; stroke-width: 4px;
   }}
-
-  /* もともとの左上席番号は使わないので非表示にしておく */
   .seat-num {{
-    display: none;
+    font: 700 60px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    fill:#111;
+    paint-order: stroke; stroke: #fff; stroke-width: 3px;
   }}
 
   .cards {{
@@ -186,7 +185,6 @@ def index():
     const EDIT_MODE   = {edit_mode_js};
     const LABEL_OFFSET = 0.08;
 
-    // ★ 全角数字 １〜８（席番号と状態ラベルをここから作る）
     const SEAT_NUM_LABELS = ['１','２','３','４','５','６','７','８'];
 
     let IMG_W = 0, IMG_H = 0;
@@ -215,7 +213,6 @@ def index():
       r.setAttribute('width', a.w);
       r.setAttribute('height', a.h);
 
-      // num は非表示だが位置だけ一応更新しておく（安全のため）
       num.setAttribute('x', a.x + Math.max(8, a.w * 0.03));
       num.setAttribute('y', a.y + a.h * 0.12);
 
@@ -261,8 +258,7 @@ def index():
         t.setAttribute('dominant-baseline','middle');
         t.setAttribute('class','seat-label');
         t.setAttribute('id',`seat-label-${{i}}`);
-        // ★ 初期表示も「番号 + 空」
-        t.textContent = `${{SEAT_NUM_LABELS[i]}} 空`;
+        t.textContent = '空';
 
         seatRects[i] = r;
         seatNums[i] = num;
@@ -369,15 +365,15 @@ def index():
         const chart=new Chart(ctx, {{
           type:"line",
           data:{{ labels:[], datasets:[{{ label:"S"+(i+1), data:[], borderWidth:2, fill:false, tension: 0.2 }}] }},
-          options{{
+          options:{{
             responsive:true, maintainAspectRatio:false, animation:false,
-            plugins{{legend{{display:false}}}},
-            scales{{
-              y{{ beginAtZero:true, suggestedMax:1, ticks{{ stepSize:1, display:false }}, grid{{ display:false }} }},
-              x{{ ticks{{ maxRotation:0, autoSkip:true, maxTicksLimit:6, font{{ size:10 }} }}, grid{{ display:false }} }}
+            plugins:{{legend:{{display:false}}}},
+            scales:{{
+              y:{{ beginAtZero:true, suggestedMax:1, ticks:{{ stepSize:1, display:false }}, grid:{{ display:false }} }},
+              x:{{ ticks:{{ maxRotation:0, autoSkip:true, maxTicksLimit:6, font:{{ size:10 }} }}, grid:{{ display:false }} }}
             }},
-            layout{{ padding{{ top: 4, right: 4, bottom: 4, left: 4 }} }},
-            elements{{ point{{ radius:0 }} }}
+            layout:{{ padding: {{ top: 4, right: 4, bottom: 4, left: 4 }} }},
+            elements:{{ point:{{ radius:0 }} }}
           }}
         }});
         charts.push(chart);
@@ -399,8 +395,7 @@ def index():
         const t=document.getElementById(`seat-label-${{i}}`);
         if (!r||!t) continue;
         r.setAttribute('class', `seat-rect ${{occ ? 'occ':'free'}}`);
-        // ★ 状態更新時も「番号 + 空 / 着座中」
-        t.textContent = `${{SEAT_NUM_LABELS[i]}} ${{occ ? '着座中' : '空'}}`;
+        t.textContent = occ ? '着座中' : '空';
       }}
     }}
 
@@ -475,3 +470,5 @@ def push():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
+
+
