@@ -1,4 +1,4 @@
-# server.py — Bus Monitor + 座席編集モード + ヘッダー背景画像
+# server.py — Bus Monitor + 座席編集モード + ヘッダー画像（高さ=画像の縦幅）
 from flask import Flask, jsonify, request, send_from_directory
 import time, os, json
 
@@ -51,27 +51,38 @@ def index():
   h1 {{ font-size:1.4rem; display:flex; gap:.5rem; align-items:center; margin:12px 0 6px; }}
   .sub {{ color:#666; font-size:.9rem; margin-bottom:12px; }}
 
-  /* ★ 画像付きヘッダー（🚌 Bus Monitor の背景） */
+  /* ★ 画像と同じ高さのヘッダー（画像 + テキストオーバーレイ） */
   .hero {{
     max-width: 980px;
     margin: 0 auto 12px;
-    padding: 14px 16px 18px;
+    position: relative;
     border-radius: 16px;
-    background-image: url('/static/header.png');
-    background-size: cover;
-    background-position: center;
-    background-repeat: no-repeat;
-    color: #fff;
+    overflow: hidden;
     box-shadow: 0 10px 24px rgba(0,0,0,.15);
   }}
-  .hero h1 {{
+  .hero-img {{
+    width: 100%;
+    display: block;
+  }}
+  .hero-inner {{
+    position: absolute;
+    inset: 0;
+    padding: 14px 16px 18px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    color: #fff;
+    /* 下側を少し暗くして文字を読みやすくする */
+    background: linear-gradient(to bottom, rgba(0,0,0,0.15), rgba(0,0,0,0.5));
+  }}
+  .hero-inner h1 {{
     margin: 0 0 4px;
     font-size: 1.6rem;
     display: flex;
     gap: .5rem;
     align-items: center;
   }}
-  .hero .sub {{
+  .hero-inner .sub {{
     margin: 0;
     font-size: .9rem;
     color: #f5f5f5;
@@ -131,8 +142,11 @@ def index():
 </head>
 <body>
   <div class="hero">
-    <h1>🚌 Bus Monitor</h1>
-    <div class="sub">last update: <span id="ts">---</span> </div>
+    <img src="/static/header.png" alt="Bus Header" class="hero-img" />
+    <div class="hero-inner">
+      <h1>🚌 Bus Monitor</h1>
+      <div class="sub">last update: <span id="ts">---</span> </div>
+    </div>
   </div>
 
   <div class="bus-wrap">
@@ -260,198 +274,4 @@ def index():
     function enableEditMode() {{
       const svg = document.getElementById('bus-svg');
       if (!svg) return;
-      svg.style.touchAction = 'none';
-
-      let dragInfo = null;
-
-      seatRects.forEach((rect, idx) => {{
-        if (!rect) return;
-        rect.style.cursor = 'move';
-
-        rect.addEventListener('pointerdown', e => {{
-          dragInfo = {{
-            idx,
-            pointerId: e.pointerId,
-            startX: e.clientX,
-            startY: e.clientY,
-            startNorm: {{ ...SEATS_NORM[idx] }}
-          }};
-          rect.setPointerCapture(e.pointerId);
-        }});
-
-        rect.addEventListener('pointermove', e => {{
-          if (!dragInfo || dragInfo.idx !== idx) return;
-          const dx = e.clientX - dragInfo.startX;
-          const dy = e.clientY - dragInfo.startY;
-          const dxNorm = dx / IMG_W;
-          const dyNorm = dy / IMG_H;
-          const n = SEATS_NORM[idx];
-          n.x = dragInfo.startNorm.x + dxNorm;
-          n.y = dragInfo.startNorm.y + dyNorm;
-          applySeatLayout(idx);
-        }});
-
-        rect.addEventListener('pointerup', e => {{
-          if (!dragInfo || dragInfo.idx !== idx) return;
-          try {{
-            rect.releasePointerCapture(dragInfo.pointerId);
-          }} catch (err) {{}}
-          dragInfo = null;
-          console.log('UPDATED SEATS_NORM:', JSON.stringify(SEATS_NORM, null, 2));
-        }});
-
-        rect.addEventListener('pointercancel', e => {{
-          if (!dragInfo || dragInfo.idx !== idx) return;
-          try {{
-            rect.releasePointerCapture(dragInfo.pointerId);
-          }} catch (err) {{}}
-          dragInfo = null;
-        }});
-      }});
-
-      alert('編集モード: 座席をドラッグして位置調整できます。\\n調整後、ブラウザのコンソールに出た SEATS_NORM を server.py にコピーしてください。');
-    }}
-
-    // ===== グラフ =====
-    let charts=[], totalChart=null;
-
-    function buildTotalChart() {{
-      const ctx = document.getElementById('totalChart').getContext('2d');
-      if (totalChart) totalChart.destroy();
-      totalChart = new Chart(ctx, {{
-        type: "line",
-        data: {{ labels: [], datasets: [{{ label: "Total", data: [], borderWidth: 2, fill: false, tension: 0.2 }}] }},
-        options: {{
-          responsive: true,
-          maintainAspectRatio: false,
-          animation: false,
-          elements: {{ point: {{ radius: 0 }} }},
-          plugins: {{ legend: {{ display:false }} }},
-          scales: {{
-            y: {{ beginAtZero: true, suggestedMax: {NUM_SEATS}, ticks: {{ stepSize: 1 }} }},
-            x: {{ ticks: {{ maxRotation: 0, autoSkip: true, maxTicksLimit: 8 }} }}
-          }},
-          layout: {{ padding: {{ top: 6, right: 6, bottom: 6, left: 6 }} }}
-        }}
-      }});
-    }}
-
-    function buildSeatCharts() {{
-      const wrap=document.getElementById("charts"); wrap.innerHTML=""; charts=[];
-      for (let i=0;i<NUM_SEATS;i++) {{
-        const row=document.createElement("div"); row.className="chart-row";
-        const title=document.createElement("div"); title.className="chart-title"; title.textContent="Seat "+(i+1);
-        const box=document.createElement("div"); box.className="chart-box";
-        const c=document.createElement("canvas"); c.id="cv_"+i; box.appendChild(c);
-        row.appendChild(title); row.appendChild(box); wrap.appendChild(row);
-
-        const ctx=c.getContext("2d");
-        const chart=new Chart(ctx, {{
-          type:"line",
-          data:{{ labels:[], datasets:[{{ label:"S"+(i+1), data:[], borderWidth:2, fill:false, tension: 0.2 }}] }},
-          options:{{
-            responsive:true, maintainAspectRatio:false, animation:false,
-            plugins:{{legend:{{display:false}}}},
-            scales:{{
-              y:{{ beginAtZero:true, suggestedMax:1, ticks:{{ stepSize:1, display:false }}, grid:{{ display:false }} }},
-              x:{{ ticks:{{ maxRotation:0, autoSkip:true, maxTicksLimit:6, font:{{ size:10 }} }}, grid:{{ display:false }} }}
-            }},
-            layout:{{ padding: {{ top: 4, right: 4, bottom: 4, left: 4 }} }},
-            elements:{{ point:{{ radius:0 }} }}
-          }}
-        }});
-        charts.push(chart);
-      }}
-    }}
-
-    async function updateStatus() {{
-      const res=await fetch("/status"); const data=await res.json();
-      const tsRaw=data.timestamp; let tsReadable=tsRaw;
-      if (typeof tsRaw==="number") tsReadable=new Date(tsRaw*1000).toLocaleString();
-      document.getElementById("ts").textContent = tsReadable ?? '---';
-      document.getElementById("count").textContent = data.count ?? 0;
-      document.getElementById("seats").textContent = JSON.stringify((data.seats||[]).slice(0,NUM_SEATS));
-
-      const seats=(data.seats||[]).slice(0,NUM_SEATS);
-      for (let i=0;i<NUM_SEATS;i++) {{
-        const occ=seats[i]===1;
-        const r=document.getElementById(`seat-rect-${{i}}`);
-        const t=document.getElementById(`seat-label-${{i}}`);
-        if (!r||!t) continue;
-        r.setAttribute('class', `seat-rect ${{occ ? 'occ':'free'}}`);
-        t.textContent = occ ? '着座中' : '空';
-      }}
-    }}
-
-    async function updateCharts() {{
-      const r=await fetch("/history"); const hist=await r.json();
-      const samples=hist.samples||[];
-      const labels=samples.map(s=> typeof s.timestamp==="number" ? new Date(s.timestamp*1000).toLocaleTimeString() : String(s.timestamp).slice(11,19));
-
-      const totals = samples.map(s => Number.isInteger(s.count) ? s.count : (s.seats||[]).reduce((a,v)=>a+(v===1?1:0),0));
-      if (totalChart) {{
-        totalChart.data.labels = labels;
-        totalChart.data.datasets[0].data = totals;
-        totalChart.update();
-      }}
-
-      const series=Array.from({{length:NUM_SEATS}}, ()=>[]);
-      for (const s of samples) {{
-        for (let i=0;i<NUM_SEATS;i++) series[i].push((s.seats && s.seats[i]===1)?1:0);
-      }}
-      for (let i=0;i<NUM_SEATS;i++) {{
-        const ch=charts[i]; if (!ch) continue;
-        ch.data.labels=labels; ch.data.datasets[0].data=series[i]; ch.update();
-      }}
-    }}
-
-    async function refreshAll() {{
-      try {{ await updateStatus(); await updateCharts(); }} catch(e) {{ console.error(e); }}
-    }}
-
-    (async () => {{
-      await initBusSvg();
-      buildTotalChart();
-      buildSeatCharts();
-      await refreshAll();
-      setInterval(refreshAll, 1000);
-    }})();
-  </script>
-</body>
-</html>
-    """
-
-# ===== API =====
-@app.route("/status")
-def status():
-    return jsonify(latest_data)
-
-@app.route("/history")
-def history():
-    return jsonify({"samples": history_log[-MAX_HISTORY:]})
-
-@app.route("/push", methods=["POST"])
-def push():
-    global latest_data, history_log
-    data = request.get_json()
-    if not data:
-        return jsonify({"error":"no data"}), 400
-
-    seats = (data.get("seats") or [])
-    if len(seats) < NUM_SEATS:
-        seats = seats + [0]*(NUM_SEATS - len(seats))
-    seats = seats[:NUM_SEATS]
-
-    count = int(data.get("count", sum(1 for v in seats if v == 1)))
-    ts    = data.get("timestamp", time.time())
-
-    latest_data = {"timestamp": ts, "seats": seats, "count": count}
-    history_log.append({"timestamp": ts, "seats": seats, "count": count})
-    if len(history_log) > MAX_HISTORY:
-        history_log = history_log[-MAX_HISTORY:]
-    return jsonify({"ok": True})
-
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
-
+      svg.style.tou
