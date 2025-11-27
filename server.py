@@ -1,4 +1,4 @@
-# server.py — Bus Monitor + 座席編集モード + ヘッダー画像対応
+# server.py — Bus Monitor + 座席編集モード + ヘッダー背景画像
 from flask import Flask, jsonify, request, send_from_directory
 import time, os, json
 
@@ -7,7 +7,7 @@ app = Flask(__name__, static_folder="static")
 # ===== 基本設定 =====
 NUM_SEATS       = 8
 MAX_HISTORY     = 360            # 5秒ごと約30分
-EDIT_MODE_FLAG  = False          # 位置調整が終わったら False
+EDIT_MODE_FLAG  = False          # 座席位置調整が終わったら False
 
 # ===== 座席座標（正規化 0〜1）— 編集後 =====
 SEATS_NORM_DATA = [
@@ -51,16 +51,35 @@ def index():
   h1 {{ font-size:1.4rem; display:flex; gap:.5rem; align-items:center; margin:12px 0 6px; }}
   .sub {{ color:#666; font-size:.9rem; margin-bottom:12px; }}
 
+  /* ★ 画像付きヘッダー（🚌 Bus Monitor の背景） */
+  .hero {{
+    max-width: 980px;
+    margin: 0 auto 12px;
+    padding: 14px 16px 18px;
+    border-radius: 16px;
+    background-image: url('/static/header.png');
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    color: #fff;
+    box-shadow: 0 10px 24px rgba(0,0,0,.15);
+  }}
+  .hero h1 {{
+    margin: 0 0 4px;
+    font-size: 1.6rem;
+    display: flex;
+    gap: .5rem;
+    align-items: center;
+  }}
+  .hero .sub {{
+    margin: 0;
+    font-size: .9rem;
+    color: #f5f5f5;
+  }}
+
   .bus-wrap {{
     width:100%; max-width:980px; margin:0 auto 14px;
     background:#f5f5f5; border-radius:12px; box-shadow:0 10px 24px rgba(0,0,0,.08);
-  }}
-
-  /* ★ ヘッダー画像 */
-  .bus-header-img {{
-    width: 100%;
-    display: block;
-    border-radius: 12px 12px 0 0;
   }}
 
   .seat-rect.free {{ fill:#bdbdbd; stroke:#202020; stroke-width:2; }}
@@ -111,13 +130,12 @@ def index():
 </style>
 </head>
 <body>
-  <h1>🚌 Bus Monitor</h1>
-  <div class="sub">last update: <span id="ts">---</span> / 5秒ごとに自動更新</div>
+  <div class="hero">
+    <h1>🚌 Bus Monitor</h1>
+    <div class="sub">last update: <span id="ts">---</span> / 5秒ごとに自動更新</div>
+  </div>
 
   <div class="bus-wrap">
-    <!-- ★ 追加：ヘッダー画像 -->
-    <img src="/static/header.png" alt="Bus Header" class="bus-header-img" />
-    <!-- 既存のバスSVG -->
     <svg id="bus-svg" width="100%" height="auto" preserveAspectRatio="xMidYMid meet"></svg>
   </div>
 
