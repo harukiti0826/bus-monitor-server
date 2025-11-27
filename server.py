@@ -55,7 +55,7 @@ def index():
   .hero {{
     max-width: 980px;
     margin: 0 auto 12px;
-    padding: 28px 16px 36px;
+    padding: 14px 16px 18px;
     border-radius: 16px;
     background-image: url('/static/header.png');
     background-size: cover;
@@ -75,6 +75,13 @@ def index():
     margin: 0;
     font-size: .9rem;
     color: #f5f5f5;
+  }}
+
+  /* 画面が広いとき（PC向け）はヘッダーをさらに縦に広げる */
+  @media (min-width: 900px) {{
+    .hero {{
+      padding: 40px 32px 60px;  /* 上下の余白をPC向けに増量 */
+    }}
   }}
 
   .bus-wrap {{
