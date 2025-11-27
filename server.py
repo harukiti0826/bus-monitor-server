@@ -108,15 +108,12 @@ def index():
   .seat-rect.free {{ fill:#bdbdbd; stroke:#202020; stroke-width:2; }}
   .seat-rect.occ  {{ fill:#8bdc6a; stroke:#202020; stroke-width:2; }}
 
-  .seat-label {{
+  /* ★ 状態ラベルと席番号を同じフォントで */
+  .seat-label,
+  .seat-num {{
     font: 700 80px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     fill:#111;
     paint-order: stroke; stroke: #fff; stroke-width: 4px;
-  }}
-  .seat-num {{
-    font: 700 60px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    fill:#111;
-    paint-order: stroke; stroke: #fff; stroke-width: 3px;
   }}
 
   .cards {{
@@ -208,16 +205,23 @@ def index():
       const t = seatLabels[idx];
       if (!r || !num || !t) return;
 
+      // 座席の中心（状態ラベルの位置）
+      const cx = a.x + a.w / 2;
+      const cy = a.y + a.h * (0.5 + LABEL_OFFSET);
+
+      // 座席枠
       r.setAttribute('x', a.x);
       r.setAttribute('y', a.y);
       r.setAttribute('width', a.w);
       r.setAttribute('height', a.h);
 
-      num.setAttribute('x', a.x + Math.max(8, a.w * 0.03));
-      num.setAttribute('y', a.y + a.h * 0.12);
+      // 席番号：状態ラベルの左側に配置
+      num.setAttribute('x', cx - a.w * 0.08);
+      num.setAttribute('y', cy);
 
-      t.setAttribute('x', a.x + a.w / 2);
-      t.setAttribute('y', a.y + a.h * (0.5 + LABEL_OFFSET));
+      // 状態ラベル（空 / 着座中）：中央
+      t.setAttribute('x', cx);
+      t.setAttribute('y', cy);
     }}
 
     async function initBusSvg() {{
@@ -249,8 +253,9 @@ def index():
         r.setAttribute('id',`seat-rect-${{i}}`);
 
         const num = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        num.setAttribute('dominant-baseline', 'hanging');
         num.setAttribute('class','seat-num');
+        num.setAttribute('text-anchor','end');      // 右揃え
+        num.setAttribute('dominant-baseline','middle');
         num.textContent = SEAT_NUM_LABELS[i];
 
         const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
@@ -365,15 +370,15 @@ def index():
         const chart=new Chart(ctx, {{
           type:"line",
           data:{{ labels:[], datasets:[{{ label:"S"+(i+1), data:[], borderWidth:2, fill:false, tension: 0.2 }}] }},
-          options:{{
+          options{{
             responsive:true, maintainAspectRatio:false, animation:false,
-            plugins:{{legend:{{display:false}}}},
-            scales:{{
-              y:{{ beginAtZero:true, suggestedMax:1, ticks:{{ stepSize:1, display:false }}, grid:{{ display:false }} }},
-              x:{{ ticks:{{ maxRotation:0, autoSkip:true, maxTicksLimit:6, font:{{ size:10 }} }}, grid:{{ display:false }} }}
+            plugins{{legend{{display:false}}}},
+            scales{{
+              y{{ beginAtZero:true, suggestedMax:1, ticks{{ stepSize:1, display:false }}, grid{{ display:false }} }},
+              x{{ ticks{{ maxRotation:0, autoSkip:true, maxTicksLimit:6, font{{ size:10 }} }}, grid{{ display:false }} }}
             }},
-            layout:{{ padding: {{ top: 4, right: 4, bottom: 4, left: 4 }} }},
-            elements:{{ point:{{ radius:0 }} }}
+            layout{{ padding {{ top: 4, right: 4, bottom: 4, left: 4 }} }},
+            elements{{ point{{ radius:0 }} }}
           }}
         }});
         charts.push(chart);
@@ -470,5 +475,3 @@ def push():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
-
-
