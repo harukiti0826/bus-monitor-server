@@ -1,4 +1,4 @@
-# server.py — Bus Monitor + 座席編集モード + ヘッダー画像（高さ=画像の縦幅）
+# server.py — Bus Monitor + 座席編集モード + ヘッダー背景画像
 from flask import Flask, jsonify, request, send_from_directory
 import time, os, json
 
@@ -51,38 +51,27 @@ def index():
   h1 {{ font-size:1.4rem; display:flex; gap:.5rem; align-items:center; margin:12px 0 6px; }}
   .sub {{ color:#666; font-size:.9rem; margin-bottom:12px; }}
 
-  /* ★ 画像と同じ高さのヘッダー（画像 + テキストオーバーレイ） */
+  /* ★ 画像付きヘッダー（🚌 Bus Monitor の背景） */
   .hero {{
     max-width: 980px;
     margin: 0 auto 12px;
-    position: relative;
+    padding: 28px 16px 36px;  /* ← 縦方向の余白をほぼ2倍にして高さアップ */
     border-radius: 16px;
-    overflow: hidden;
+    background-image: url('/static/header.png');
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    color: #fff;
     box-shadow: 0 10px 24px rgba(0,0,0,.15);
   }}
-  .hero-img {{
-    width: 100%;
-    display: block;
-  }}
-  .hero-inner {{
-    position: absolute;
-    inset: 0;
-    padding: 14px 16px 18px;
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-end;
-    color: #fff;
-    /* 下側を少し暗くして文字を読みやすくする */
-    background: linear-gradient(to bottom, rgba(0,0,0,0.15), rgba(0,0,0,0.5));
-  }}
-  .hero-inner h1 {{
+  .hero h1 {{
     margin: 0 0 4px;
     font-size: 1.6rem;
     display: flex;
     gap: .5rem;
     align-items: center;
   }}
-  .hero-inner .sub {{
+  .hero .sub {{
     margin: 0;
     font-size: .9rem;
     color: #f5f5f5;
@@ -108,153 +97,3 @@ def index():
     fill:#111;
     paint-order: stroke; stroke: #fff; stroke-width: 3px;
   }}
-
-  .cards {{
-    display:flex; gap:10px; flex-wrap:wrap; margin:8px auto 12px; max-width:980px;
-  }}
-  .card {{
-    background:#fff; padding:var(--card-pad); border-radius:12px;
-    box-shadow:0 10px 24px rgba(0,0,0,.07); min-width:220px;
-  }}
-  .big {{ font-size:2rem; font-weight:800; }}
-  .muted {{ color:#666; font-size:.9rem; }}
-
-  /* 合計人数グラフ（固定サイズ＋余白） */
-  .total-chart-wrap {{
-    max-width: 980px; margin: 0 auto 16px; background: #fff;
-    border-radius: 16px; box-shadow: 0 10px 24px rgba(0,0,0,.07);
-    padding: 12px; height: 150px; position: relative;
-  }}
-  #totalChart {{ position:absolute; left:0; top:0; width:100%; height:100%; display:block; }}
-
-  /* ミニグラフ（余白あり） */
-  .charts {{
-    max-width:980px; margin:0 auto; background:#fff; border-radius:16px;
-    box-shadow:0 10px 24px rgba(0,0,0,.07); padding:16px;
-  }}
-  .chart-row {{ display:flex; align-items:center; gap:14px; margin:8px 0; }}
-  .chart-title {{ width:78px; text-align:right; font-size:.95rem; color:#444; }}
-  .chart-box {{ flex:1; min-width:0; }}
-  .chart-box canvas {{ width:100%; height:54px; }}
-
-  footer {{ text-align:center; color:#888; font-size:.8rem; margin-top:12px; }}
-</style>
-</head>
-<body>
-  <div class="hero">
-    <img src="/static/header.png" alt="Bus Header" class="hero-img" />
-    <div class="hero-inner">
-      <h1>🚌 Bus Monitor</h1>
-      <div class="sub">last update: <span id="ts">---</span> / 5秒ごとに自動更新</div>
-    </div>
-  </div>
-
-  <div class="bus-wrap">
-    <svg id="bus-svg" width="100%" height="auto" preserveAspectRatio="xMidYMid meet"></svg>
-  </div>
-
-  <div class="total-chart-wrap">
-    <div class="muted" style="margin-bottom:6px;">合計人数の推移</div>
-    <canvas id="totalChart"></canvas>
-  </div>
-
-  <div class="cards">
-    <div class="card">
-      <div class="muted">現在乗車中</div>
-      <div class="big"><span id="count">0</span> 人</div>
-    </div>
-    <div class="card">
-      <div class="muted">席配列</div>
-      <div style="font-family:monospace" id="seats">[{", ".join("0" for _ in range(NUM_SEATS))}]</div>
-    </div>
-  </div>
-
-  <div class="charts" id="charts"></div>
-
-  <footer>Render配信中 / Chart.js + SVG overlay</footer>
-
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script>
-    // ===== Pythonから注入 =====
-    const NUM_SEATS   = {NUM_SEATS};
-    const SEATS_NORM  = {seats_norm_json};
-    const EDIT_MODE   = {edit_mode_js};
-    const LABEL_OFFSET = 0.08;               // 中央ラベルを下げる割合（座席高さの8%）
-
-    // ★ 1と3を入れ替え（見た目ラベルを ③,②,① に）
-    const SEAT_NUM_LABELS = ['③','②','①','④','⑤','⑥','⑦','⑧'];
-
-    let IMG_W = 0, IMG_H = 0;
-    let seatRects = [], seatNums = [], seatLabels = [];
-
-    function loadImage(src) {{
-      return new Promise((resolve, reject) => {{
-        const im = new Image();
-        im.onload = () => resolve(im);
-        im.onerror = reject;
-        im.src = src + '?v=' + Date.now();
-      }});
-    }}
-    function normToAbs(n) {{ return {{ x:n.x*IMG_W, y:n.y*IMG_H, w:n.w*IMG_W, h:n.h*IMG_H }}; }}
-
-    function applySeatLayout(idx) {{
-      const n = SEATS_NORM[idx];
-      const a = normToAbs(n);
-      const r = seatRects[idx];
-      const num = seatNums[idx];
-      const t = seatLabels[idx];
-      if (!r || !num || !t) return;
-
-      r.setAttribute('x', a.x);
-      r.setAttribute('y', a.y);
-      r.setAttribute('width', a.w);
-      r.setAttribute('height', a.h);
-
-      num.setAttribute('x', a.x + Math.max(8, a.w * 0.03));
-      num.setAttribute('y', a.y + a.h * 0.12);
-
-      t.setAttribute('x', a.x + a.w / 2);
-      t.setAttribute('y', a.y + a.h * (0.5 + LABEL_OFFSET));
-    }}
-
-    async function initBusSvg() {{
-      const svg = document.getElementById('bus-svg');
-      const img = await loadImage('/static/bus.png');
-      IMG_W = img.naturalWidth; IMG_H = img.naturalHeight;
-      svg.setAttribute('viewBox', `0 0 ${{IMG_W}} ${{IMG_H}}`);
-
-      const imageEl = document.createElementNS('http://www.w3.org/2000/svg', 'image');
-      imageEl.setAttributeNS('http://www.w3.org/1999/xlink', 'href', '/static/bus.png');
-      imageEl.setAttribute('x','0'); imageEl.setAttribute('y','0');
-      imageEl.setAttribute('width', IMG_W); imageEl.setAttribute('height', IMG_H);
-      svg.appendChild(imageEl);
-
-      const seatLayer = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-      seatLayer.setAttribute('id','seat-layer'); svg.appendChild(seatLayer);
-
-      seatRects = new Array(NUM_SEATS);
-      seatNums = new Array(NUM_SEATS);
-      seatLabels = new Array(NUM_SEATS);
-
-      for (let i=0;i<NUM_SEATS;i++) {{
-        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-        g.setAttribute('data-index', String(i));
-
-        const r = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        r.setAttribute('rx',10); r.setAttribute('ry',10);
-        r.setAttribute('class','seat-rect free');
-        r.setAttribute('id',`seat-rect-${{i}}`);
-
-        const num = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        num.setAttribute('dominant-baseline', 'hanging');
-        num.setAttribute('class','seat-num');
-        num.textContent = SEAT_NUM_LABELS[i];
-
-        const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        t.setAttribute('text-anchor','middle');
-        t.setAttribute('dominant-baseline','middle');
-        t.setAttribute('class','seat-label');
-        t.setAttribute('id',`seat-label-${{i}}`);
-        t.textContent = '空';
-
-        seatRects[i] = r;
