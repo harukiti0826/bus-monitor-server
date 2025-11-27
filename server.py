@@ -55,7 +55,7 @@ def index():
   .hero {{
     max-width: 980px;
     margin: 0 auto 12px;
-    padding: 14px 16px 18px;
+    padding: 14px 16px 24px;
     border-radius: 16px;
     background-image: url('/static/header.png');
     background-size: cover;
@@ -80,7 +80,7 @@ def index():
   /* 画面が広いとき（PC向け）はヘッダーをさらに縦に広げる */
   @media (min-width: 900px) {{
     .hero {{
-      padding: 40px 32px 150px;  /* 上下の余白をPC向けに増量 */
+      padding: 40px 32px 200px;  /* 上下の余白をPC向けに増量 */
     }}
   }}
 
@@ -461,5 +461,6 @@ def push():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
+
 
 
