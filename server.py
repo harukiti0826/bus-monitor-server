@@ -71,7 +71,7 @@ def index():
   .hero {{
     max-width: 980px;
     margin: 0 auto 12px;
-    padding: 16px 16px 28px;
+    padding: 16px 16px 40px;
     border-radius: 16px;
     background-image: url('/static/header.png');
     background-size: cover;
@@ -470,4 +470,5 @@ def push():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
+
 
