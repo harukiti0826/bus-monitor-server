@@ -145,7 +145,7 @@ def index():
     <img src="/static/header.png" alt="Bus Header" class="hero-img" />
     <div class="hero-inner">
       <h1>🚌 Bus Monitor</h1>
-      <div class="sub">last update: <span id="ts">---</span> </div>
+      <div class="sub">last update: <span id="ts">---</span> / 5秒ごとに自動更新</div>
     </div>
   </div>
 
@@ -258,20 +258,3 @@ def index():
         t.textContent = '空';
 
         seatRects[i] = r;
-        seatNums[i] = num;
-        seatLabels[i] = t;
-
-        applySeatLayout(i);
-
-        g.appendChild(r); g.appendChild(num); g.appendChild(t); seatLayer.appendChild(g);
-      }}
-
-      if (EDIT_MODE) {{
-        enableEditMode();
-      }}
-    }}
-
-    function enableEditMode() {{
-      const svg = document.getElementById('bus-svg');
-      if (!svg) return;
-      svg.style.tou
